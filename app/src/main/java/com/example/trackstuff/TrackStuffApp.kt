@@ -46,6 +46,12 @@ class TrackStuffApp : Application(), coil.ImageLoaderFactory {
         // Explicit-refresh limits survive restarts.
         com.example.trackstuff.data.remote.RefreshLimiter.load(kotlinx.coroutines.runBlocking { container.settings.refreshLimits() })
         com.example.trackstuff.data.remote.RefreshLimiter.persist = { map -> container.appScope.launch { container.settings.saveRefreshLimits(map) } }
+        // Retry a sync that failed offline as soon as the network is back.
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val request = android.net.NetworkRequest.Builder().addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build()
+        cm.registerNetworkCallback(request, object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) { container.sync.onNetworkAvailable() }
+        })
     }
 
     /** Coil uses the shared HTTP client: posters and JSON responses in the same cache, same size setting. */

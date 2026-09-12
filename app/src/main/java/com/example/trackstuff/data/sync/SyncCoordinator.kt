@@ -53,6 +53,8 @@ class SyncCoordinator(
     private var pendingLocal: Job? = null
     private var authJob: Job? = null
     @Volatile private var pulling = false
+    /** Set when a sync failed (typically offline); the next network availability retries it. */
+    @Volatile private var retryPending = false
 
     /** Called when the app returns to the foreground. */
     fun onForeground() {
@@ -68,6 +70,15 @@ class SyncCoordinator(
         pendingLocal?.cancel()
         pendingLocal = scope.launch {
             delay(LOCAL_CHANGE_DELAY_MS)
+            syncAll()
+        }
+    }
+
+    /** Called when a network with internet access becomes available: retries a sync that failed while offline. */
+    fun onNetworkAvailable() {
+        if (!retryPending) return
+        scope.launch {
+            delay(NETWORK_SETTLE_MS)
             syncAll()
         }
     }
@@ -118,6 +129,7 @@ class SyncCoordinator(
         val primary = settingsRepo.current().syncPrimary
         val ordered = connected.sortedBy { if (it.key == primary) 0 else 1 }
         val results = LinkedHashMap<SyncService, String>()
+        retryPending = false // set again by any service that fails below
         for (service in ordered) results[service] = sync(service)
         return results
     }
@@ -128,9 +140,11 @@ class SyncCoordinator(
         val msg = try {
             pulling = true
             val report = when (service) { SyncService.TRAKT -> trakt.sync(); SyncService.SIMKL -> simkl.sync() }
+            if (report.errors.isNotEmpty()) retryPending = true
             report.summary(service.label)
         } catch (e: Exception) {
             Log.w(TAG, "${service.label} sync failed", e)
+            retryPending = true
             "${service.label}: ${e.message}"
         } finally {
             pulling = false
@@ -143,5 +157,7 @@ class SyncCoordinator(
     companion object {
         const val FOREGROUND_INTERVAL_MS = 15 * 60 * 1000L
         const val LOCAL_CHANGE_DELAY_MS = 60 * 1000L
+        /** Short pause after the network comes back, so that DNS / captive portals settle before retrying. */
+        const val NETWORK_SETTLE_MS = 5 * 1000L
     }
 }
