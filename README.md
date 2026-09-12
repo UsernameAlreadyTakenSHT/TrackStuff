@@ -2,6 +2,9 @@
 
 Minimal Android app to track movies, series, documentaries and anime. Kotlin, Jetpack Compose, Room.
 
+> Personal project, built with AI assistance (Claude Code). No store release is planned: releases are
+> published here on GitHub only (installable with [Obtainium](https://github.com/ImranR98/Obtainium)).
+
 - **Library**: Continue watching · Start watching · History, with season/episode progress.
 - **Discover**: trending, popular and new titles from TMDB, TVDB, IMDb (Top 250, Popular now) and omdb.org.
 - **Search & detail pages** with a fallback cascade: TMDB → TVDB → OMDb API → IMDb datasets → omdb.org
