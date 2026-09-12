@@ -30,6 +30,8 @@ object Network {
     val CACHE_TIERS_MB = listOf(200, 500, 1024, 2048, 5120, 0)
     const val DEFAULT_CACHE_MB = 1024
     private const val JSON_TTL_HOURS = 24
+    /** Detail pages and OMDb lookups change slowly; a longer lifetime also protects the OMDb daily quota (1,000 requests). */
+    private const val DETAIL_TTL_DAYS = 7
     private const val IMAGE_TTL_DAYS = 30
     private const val OFFLINE_MAX_STALE_DAYS = 30
     private const val UNLIMITED_BYTES = Long.MAX_VALUE / 4
@@ -122,7 +124,30 @@ object Network {
     private val IMAGE_HOSTS = setOf("image.tmdb.org", "artworks.thetvdb.com", "www.omdb.org", "m.media-amazon.com", "simkl.in")
 
     private fun isCacheable(request: Request) = request.method == "GET" && (request.url.host in JSON_HOSTS || request.url.host in IMAGE_HOSTS)
-    private fun ttlSeconds(request: Request) = if (request.url.host in IMAGE_HOSTS) IMAGE_TTL_DAYS * 86400 else JSON_TTL_HOURS * 3600
+    /** List endpoints (charts, search, lookups by name) are refreshed daily; everything else is a detail page. */
+    private fun isListRequest(request: Request): Boolean {
+        val p = request.url.encodedPath
+        return LIST_PATHS.any { it in p } || (request.url.host == "www.omdbapi.com" && request.url.queryParameter("t") != null)
+    }
+    private val LIST_PATHS = listOf("/trending/", "/popular", "/now_playing", "/on_the_air", "/search", "/filter", "/find/")
+
+    private fun ttlSeconds(request: Request) = when {
+        request.url.host in IMAGE_HOSTS -> IMAGE_TTL_DAYS * 86400
+        isListRequest(request) -> JSON_TTL_HOURS * 3600
+        else -> DETAIL_TTL_DAYS * 86400
+    }
+
+    /**
+     * Drops the cached responses whose URL matches [predicate], so that the next call hits the network.
+     * Used by the explicit "refresh" actions; automatic loads always go through the cache.
+     */
+    fun evict(predicate: (String) -> Boolean) {
+        val cache = client.cache ?: return
+        runCatching {
+            val it = cache.urls()
+            while (it.hasNext()) if (predicate(it.next())) it.remove()
+        }.onFailure { android.util.Log.w("Network", "Cache eviction failed", it) }
+    }
 
     /** Enforces a uniform lifetime on GET responses of the metadata databases, overriding server headers. */
     private val cacheTtlInterceptor = Interceptor { chain ->

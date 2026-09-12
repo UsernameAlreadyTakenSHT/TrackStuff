@@ -34,7 +34,7 @@ class DiscoverViewModel(private val metadata: MetadataRepository, private val li
     private val _state = MutableStateFlow(DiscoverUiState())
     val state: StateFlow<DiscoverUiState> = _state
 
-    init { refresh() }
+    init { load(force = false) }
 
     fun setSource(source: DataSource) = _state.update { it.copy(source = source) }
 
@@ -54,13 +54,16 @@ class DiscoverViewModel(private val metadata: MetadataRepository, private val li
 
     fun setMedia(media: MediaFilter) = _state.update { it.copy(media = media) }
 
-    fun refresh() {
+    /** Refresh button: bypasses the memory and HTTP caches for the chart lists. */
+    fun refresh() = load(force = true)
+
+    private fun load(force: Boolean) {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             val outcome = try {
-                metadata.discover()
+                metadata.discover(force)
             } catch (e: Exception) {
-                com.example.trackstuff.data.repository.DiscoverOutcome(emptyList(), listOf(e.message ?: "Erreur"))
+                com.example.trackstuff.data.repository.DiscoverOutcome(emptyList(), listOf(e.message ?: "Error"))
             }
             val inLib = outcome.sections.flatMap { it.items }
                 .mapNotNull { r -> library.findExisting(r.ids, r.isSeries)?.let { r to it.localId } }.toMap()

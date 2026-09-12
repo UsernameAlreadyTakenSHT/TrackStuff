@@ -190,7 +190,21 @@ class MetadataRepository(
      * Rows of the Discover screen. Each source is independent: a missing key or a network error
      * simply drops the row and adds a message.
      */
-    suspend fun discover(): DiscoverOutcome {
+    /** Last Discover result, kept in memory so that returning to the tab is instant (the HTTP cache still avoids network). */
+    @Volatile private var discoverMemo: Pair<Long, DiscoverOutcome>? = null
+
+    /**
+     * Rows of the Discover screen. [force] (explicit refresh) drops the cached list responses first so the
+     * charts are re-fetched; otherwise a result under [DISCOVER_MEMO_MS] old is returned as is.
+     */
+    suspend fun discover(force: Boolean = false): DiscoverOutcome {
+        val memo = discoverMemo
+        if (!force && memo != null && System.currentTimeMillis() - memo.first < DISCOVER_MEMO_MS && memo.second.problems.isEmpty()) return memo.second
+        if (force) com.example.trackstuff.data.remote.Network.evict { url -> LIST_URL_MARKERS.any { it in url } }
+        return discoverNow().also { discoverMemo = System.currentTimeMillis() to it }
+    }
+
+    private suspend fun discoverNow(): DiscoverOutcome {
         val s = settingsRepo.current()
         val sections = mutableListOf<DiscoverSection>()
         val problems = mutableListOf<String>()
@@ -718,6 +732,11 @@ class MetadataRepository(
         /** Titles per Discover row. TVDB returns 500 per page, TMDB 20 (hence the pagination). */
         const val ROW_SIZE = 100
         const val TMDB_PAGES = ROW_SIZE / 20 + 2
+        /** Discover rows are kept in memory this long; the HTTP cache (24 h) covers the rest. */
+        const val DISCOVER_MEMO_MS = 60 * 60 * 1000L
+        /** URL fragments of the chart endpoints, evicted from the HTTP cache on an explicit refresh. */
+        private val LIST_URL_MARKERS = listOf("/trending/", "/popular", "/now_playing", "/on_the_air", "/filter")
+
         /** Below this count a row is not shown. */
         const val MIN_ROW = 10
 

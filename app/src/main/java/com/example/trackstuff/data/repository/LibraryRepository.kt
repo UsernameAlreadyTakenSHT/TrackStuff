@@ -117,6 +117,13 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
     suspend fun refresh(localId: Long): LibraryItem? {
         val item = get(localId) ?: return null
         val d = item.details
+        // Explicit refresh: drop this title's cached responses so the sources are actually re-queried.
+        val markers = listOfNotNull(
+            d.ids.tmdbId?.let { if (d.isSeries) "/tv/" else "/movie/" },
+            d.ids.tvdbId?.let { if (d.isSeries) "/series/" else "/movies/" },
+            d.ids.imdbId?.let { "i=" },
+        )
+        if (markers.isNotEmpty()) com.example.trackstuff.data.remote.Network.evict { url -> markers.any { it in url } }
         val fresh = metadata.details(d.ids, d.isSeries, d.title, d.year)
         // Keep the category chosen by the user when it differs from the automatic guess.
         val kind = if (d.kind != fresh.kind && d.kind != MediaKind.MOVIE && d.kind != MediaKind.SERIES) d.kind else fresh.kind
