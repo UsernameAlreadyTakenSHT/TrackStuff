@@ -1,0 +1,166 @@
+<resources>
+    <string name="app_name">TrackStuff</string>
+
+    <!-- Tabs -->
+    <string name="tab_library">Library</string>
+    <string name="tab_discover">Discover</string>
+    <string name="tab_search">Search</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Kinds -->
+    <string name="kind_movie">Movie</string>
+    <string name="kind_series">Series</string>
+    <string name="kind_documentary">Documentary</string>
+    <string name="kind_anime">Anime</string>
+
+    <!-- Statuses -->
+    <string name="status_planned">Plan to watch</string>
+    <string name="status_watching">Watching</string>
+    <string name="status_completed">Completed</string>
+    <string name="status_on_hold">On hold</string>
+    <string name="status_dropped">Dropped</string>
+
+    <!-- Library -->
+    <string name="library_title">My library</string>
+    <string name="library_continue">Continue watching</string>
+    <string name="library_start">Start watching</string>
+    <string name="library_history">History</string>
+    <string name="library_empty_continue">Nothing in progress. Mark a title as “Watching” from its page.</string>
+    <string name="library_empty_start_none">Your library is empty: add titles from Discover or Search.</string>
+    <string name="library_empty_start">Nothing planned.</string>
+    <string name="library_empty_history">Nothing completed yet.</string>
+    <plurals name="library_count">
+        <item quantity="one">%d title in the library</item>
+        <item quantity="other">%d titles in the library</item>
+    </plurals>
+    <string name="row_empty">Nothing for now.</string>
+
+    <!-- Discover -->
+    <string name="discover_title">Discover</string>
+    <string name="discover_refresh">Refresh</string>
+    <string name="discover_movies">Movies</string>
+    <string name="discover_series">Series</string>
+    <string name="discover_nothing">Nothing to show yet.</string>
+    <string name="in_library">In my list</string>
+
+    <!-- Search -->
+    <string name="search_title">Search</string>
+    <string name="search_placeholder">Movie, series, documentary, anime…</string>
+    <string name="search_clear">Clear</string>
+    <string name="search_results_via">Results via %s</string>
+    <string name="search_no_results">No results.</string>
+    <string name="search_hint">Search for a title to add it to your library.\nSources: TMDB, then TVDB, then OMDb API, then IMDb and omdb.org (offline).</string>
+
+    <!-- Detail -->
+    <string name="back">Back</string>
+    <string name="detail_refresh">Refresh this page</string>
+    <string name="detail_remove">Remove</string>
+    <string name="detail_not_found">Page not found</string>
+    <string name="detail_remove_title">Remove from library?</string>
+    <string name="detail_remove_text">Status and progress will be deleted here, and the title removed from Trakt / Simkl at the next sync.</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="detail_min_per_episode">%d min/ep.</string>
+    <plurals name="detail_seasons">
+        <item quantity="one">%d season</item>
+        <item quantity="other">%d seasons</item>
+    </plurals>
+    <string name="detail_episodes">%d ep.</string>
+    <string name="detail_next_episode">Next episode: %s</string>
+    <string name="detail_updating">Updating…</string>
+    <string name="detail_add_planned">Add to “Plan to watch”</string>
+    <string name="detail_add_other">Other…</string>
+    <string name="detail_added_to">Added to “%s”</string>
+    <string name="detail_removed">Removed from library</string>
+    <string name="detail_updated">Page updated</string>
+    <string name="detail_update_failed">Update failed: %s</string>
+    <string name="detail_ratings">Ratings</string>
+    <string name="detail_ratings_hint">Set an OMDb API key in Settings to show ratings. The chips open the sites.</string>
+    <string name="detail_credits">Credits</string>
+    <string name="credit_director">Director</string>
+    <string name="credit_creator">Created by</string>
+    <string name="credit_writer">Writer</string>
+    <string name="credit_producer">Producer</string>
+    <string name="credit_studio">Studio</string>
+    <string name="credit_network">Network</string>
+    <string name="credit_cast">Starring</string>
+    <string name="detail_synopsis">Synopsis</string>
+    <string name="detail_no_overview">No description available.</string>
+    <string name="detail_sources">Sources — %s</string>
+    <string name="source_poster">poster: %s</string>
+    <string name="source_overview">description: %s</string>
+    <string name="source_ratings">ratings: OMDb API</string>
+    <string name="detail_tracking">My tracking</string>
+    <string name="detail_progress">Progress</string>
+    <string name="detail_my_rating">My rating</string>
+    <string name="detail_category">Category</string>
+    <string name="detail_notes">Personal notes</string>
+    <string name="detail_synced">Synced: %s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_prefs">Preferences</string>
+    <string name="settings_prefs_hint">Language of the pages and region (age ratings).</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_region">Region</string>
+    <string name="settings_cache">Cache</string>
+    <string name="settings_cache_hint">Database responses and posters kept on the device: fewer requests, offline browsing.</string>
+    <string name="settings_cache_unlimited">Unlimited</string>
+    <string name="settings_cache_used">Used: %s</string>
+    <string name="settings_cache_clear">Clear</string>
+    <string name="settings_databases">Databases</string>
+    <string name="settings_databases_hint">Posters, synopses, search and discover. Order: TMDB, then TVDB, then OMDb API, then IMDb datasets, then omdb.org.</string>
+    <string name="settings_tmdb_key">API key (v3) or read access token (v4)</string>
+    <string name="settings_tvdb_key">API key (v4)</string>
+    <string name="settings_tvdb_pin">Subscriber PIN (optional)</string>
+    <string name="settings_omdborg_hint">Free database imported into the app (~26 MB): posters, synopses, cast, countries and runtimes as a last fallback, offline search. Once a month at most.</string>
+    <string name="settings_omdborg_not_imported">Not imported</string>
+    <plurals name="settings_omdborg_titles">
+        <item quantity="one">%s title</item>
+        <item quantity="other">%s titles</item>
+    </plurals>
+    <string name="settings_omdborg_download">Download</string>
+    <string name="settings_omdborg_update">Update</string>
+    <string name="settings_omdborg_limit">Download limited to once a month · next possible on %s</string>
+    <string name="settings_omdborg_done">Import complete: %1$d titles, %2$d translated titles.</string>
+    <string name="settings_imdb_standard">Standard (~280 MB)</string>
+    <string name="settings_imdb_full">Full (~1.9 GB)</string>
+    <string name="settings_imdb_hint">Official IMDb datasets, once a month at most (Wi-Fi recommended). Standard: ratings and vote counts, episodes per season, offline Top 250.</string>
+    <string name="settings_imdb_hint_full">Full: everything from Standard plus cast and roles, directors and writers, translated titles — all offline. Import takes 30–45 minutes.</string>
+    <string name="settings_imdb_done">Import complete: %1$d titles.</string>
+    <string name="settings_ratings">Ratings</string>
+    <string name="settings_ratings_hint">IMDb, Rotten Tomatoes and Metacritic via OMDb API (omdbapi.com). Without a key, the chips stay as links.</string>
+    <string name="settings_api_key">API key</string>
+    <string name="settings_sync">Sync</string>
+    <string name="settings_sync_hint">Statuses, progress and removals pushed and pulled. Sign in with a code, no password.</string>
+    <string name="settings_sync_auto">Syncs automatically when the app opens and about a minute after each change. A title changed here since its last sync always wins.</string>
+    <string name="settings_sync_last">Last sync: %s · automatic on open and after each change.</string>
+    <string name="settings_sync_primary">When both disagree, trust</string>
+    <string name="settings_client_id">Client ID</string>
+    <string name="settings_client_secret">Client secret</string>
+    <string name="settings_trakt_redirect">Redirect URI to declare: urn:ietf:wg:oauth:2.0:oob</string>
+    <string name="settings_autosave">Changes are saved automatically.</string>
+    <string name="settings_saved">Saved automatically.</string>
+    <string name="settings_open">Open %s</string>
+    <string name="service_code_intro">Open %s and enter:</string>
+    <string name="service_open_site">Open the site</string>
+    <string name="service_requesting">Requesting a code…</string>
+    <string name="service_connected">● Connected</string>
+    <string name="service_disconnect">Disconnect</string>
+    <string name="service_sync">Sync</string>
+    <string name="service_not_connected">○ Not connected</string>
+    <string name="service_connect">Connect</string>
+
+    <!-- Sync messages -->
+    <string name="sync_connected_trakt">Connected to Trakt</string>
+    <string name="sync_connected_simkl">Connected to Simkl</string>
+    <string name="sync_timeout">Timed out, try again.</string>
+    <string name="sync_disconnected">Disconnected</string>
+
+    <!-- Credits -->
+    <string name="settings_credits">Credits &amp; licenses</string>
+    <string name="settings_credits_hint">Data services used by this app and open-source libraries it is built with.</string>
+    <string name="settings_credits_services">Data services</string>
+    <string name="settings_credits_libraries">Open-source libraries</string>
+    <string name="settings_credits_app">TrackStuff is a personal, non-commercial app. Each service is used under its own terms; posters and metadata belong to their respective owners.</string>
+</resources>

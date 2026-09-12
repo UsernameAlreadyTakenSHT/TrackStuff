@@ -1,0 +1,154 @@
+<resources>
+    <string name="tab_library">Bibliothèque</string>
+    <string name="tab_discover">Découvrir</string>
+    <string name="tab_search">Recherche</string>
+    <string name="tab_settings">Paramètres</string>
+
+    <string name="kind_movie">Film</string>
+    <string name="kind_series">Série</string>
+    <string name="kind_documentary">Documentaire</string>
+    <string name="kind_anime">Anime</string>
+
+    <string name="status_planned">À voir</string>
+    <string name="status_watching">En cours</string>
+    <string name="status_completed">Terminé</string>
+    <string name="status_on_hold">En pause</string>
+    <string name="status_dropped">Abandonné</string>
+
+    <string name="library_title">Ma bibliothèque</string>
+    <string name="library_continue">Continuer</string>
+    <string name="library_start">Commencer</string>
+    <string name="library_history">Historique</string>
+    <string name="library_empty_continue">Aucun titre en cours. Passez un titre « En cours » depuis sa fiche.</string>
+    <string name="library_empty_start_none">Votre bibliothèque est vide : ajoutez des titres depuis Découvrir ou Recherche.</string>
+    <string name="library_empty_start">Rien à voir en attente.</string>
+    <string name="library_empty_history">Aucun titre terminé pour le moment.</string>
+    <plurals name="library_count">
+        <item quantity="one">%d titre dans la bibliothèque</item>
+        <item quantity="other">%d titres dans la bibliothèque</item>
+    </plurals>
+    <string name="row_empty">Rien pour le moment.</string>
+
+    <string name="discover_title">Découvrir</string>
+    <string name="discover_refresh">Actualiser</string>
+    <string name="discover_movies">Films</string>
+    <string name="discover_series">Séries</string>
+    <string name="discover_nothing">Rien à afficher pour le moment.</string>
+    <string name="in_library">Dans ma liste</string>
+
+    <string name="search_title">Recherche</string>
+    <string name="search_placeholder">Film, série, documentaire, anime…</string>
+    <string name="search_clear">Effacer</string>
+    <string name="search_results_via">Résultats via %s</string>
+    <string name="search_no_results">Aucun résultat.</string>
+    <string name="search_hint">Recherchez un titre pour l\'ajouter à votre bibliothèque.\nSources : TMDB, puis TVDB, puis OMDb API, puis IMDb et omdb.org (hors-ligne).</string>
+
+    <string name="back">Retour</string>
+    <string name="detail_refresh">Actualiser la fiche</string>
+    <string name="detail_remove">Retirer</string>
+    <string name="detail_not_found">Fiche introuvable</string>
+    <string name="detail_remove_title">Retirer de la bibliothèque ?</string>
+    <string name="detail_remove_text">Statut et progression seront supprimés ici, et le titre retiré de Trakt / Simkl à la prochaine synchro.</string>
+    <string name="cancel">Annuler</string>
+    <string name="close">Fermer</string>
+    <string name="detail_min_per_episode">%d min/ép.</string>
+    <plurals name="detail_seasons">
+        <item quantity="one">%d saison</item>
+        <item quantity="other">%d saisons</item>
+    </plurals>
+    <string name="detail_episodes">%d ép.</string>
+    <string name="detail_next_episode">Prochain épisode : %s</string>
+    <string name="detail_updating">Mise à jour…</string>
+    <string name="detail_add_planned">Ajouter à « À voir »</string>
+    <string name="detail_add_other">Autre…</string>
+    <string name="detail_added_to">Ajouté à « %s »</string>
+    <string name="detail_removed">Retiré de la bibliothèque</string>
+    <string name="detail_updated">Fiche mise à jour</string>
+    <string name="detail_update_failed">Mise à jour impossible : %s</string>
+    <string name="detail_ratings">Notes</string>
+    <string name="detail_ratings_hint">Configurez une clé OMDb API dans les paramètres pour afficher les notes. Les pastilles ouvrent les sites.</string>
+    <string name="detail_credits">Générique</string>
+    <string name="credit_director">Réalisation</string>
+    <string name="credit_creator">Création</string>
+    <string name="credit_writer">Scénario</string>
+    <string name="credit_producer">Production</string>
+    <string name="credit_studio">Studio</string>
+    <string name="credit_network">Diffuseur</string>
+    <string name="credit_cast">Avec</string>
+    <string name="detail_synopsis">Synopsis</string>
+    <string name="detail_no_overview">Aucune description disponible.</string>
+    <string name="detail_sources">Sources — %s</string>
+    <string name="source_poster">affiche : %s</string>
+    <string name="source_overview">description : %s</string>
+    <string name="source_ratings">notes : OMDb API</string>
+    <string name="detail_tracking">Mon suivi</string>
+    <string name="detail_progress">Progression</string>
+    <string name="detail_my_rating">Ma note</string>
+    <string name="detail_category">Catégorie</string>
+    <string name="detail_notes">Notes personnelles</string>
+    <string name="detail_synced">Synchronisé : %s</string>
+
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_prefs">Préférences</string>
+    <string name="settings_prefs_hint">Langue des fiches et région (classifications).</string>
+    <string name="settings_language">Langue</string>
+    <string name="settings_region">Région</string>
+    <string name="settings_cache">Cache</string>
+    <string name="settings_cache_hint">Réponses des bases et affiches gardées sur l\'appareil : moins de requêtes, consultation hors-ligne.</string>
+    <string name="settings_cache_unlimited">Illimité</string>
+    <string name="settings_cache_used">Utilisé : %s</string>
+    <string name="settings_cache_clear">Vider</string>
+    <string name="settings_databases">Bases de données</string>
+    <string name="settings_databases_hint">Affiches, synopsis, recherche et découverte. Ordre : TMDB, puis TVDB, puis OMDb API, puis datasets IMDb, puis omdb.org.</string>
+    <string name="settings_tmdb_key">Clé d\'API v3 ou jeton v4</string>
+    <string name="settings_tvdb_key">Clé d\'API v4</string>
+    <string name="settings_tvdb_pin">PIN d\'abonné (optionnel)</string>
+    <string name="settings_omdborg_hint">Base libre importée dans l\'application (~26 Mo) : affiches, synopsis, casting, pays et durées en dernier repli, recherche sans réseau. Une fois par mois au plus.</string>
+    <string name="settings_omdborg_not_imported">Non importée</string>
+    <plurals name="settings_omdborg_titles">
+        <item quantity="one">%s titre</item>
+        <item quantity="other">%s titres</item>
+    </plurals>
+    <string name="settings_omdborg_download">Télécharger</string>
+    <string name="settings_omdborg_update">Mettre à jour</string>
+    <string name="settings_omdborg_limit">Téléchargement limité à une fois par mois · prochain possible le %s</string>
+    <string name="settings_omdborg_done">Import terminé : %1$d titres, %2$d titres traduits.</string>
+    <string name="settings_imdb_standard">Standard (~280 Mo)</string>
+    <string name="settings_imdb_full">Complet (~1,9 Go)</string>
+    <string name="settings_imdb_hint">Datasets officiels IMDb, une fois par mois au plus (Wi-Fi conseillé). Standard : notes et nombre de votes, épisodes par saison, Top 250 hors-ligne.</string>
+    <string name="settings_imdb_hint_full">Complet : tout le Standard plus casting et rôles, réalisation et scénario, titres traduits — le tout hors-ligne. L\'import prend 30 à 45 minutes.</string>
+    <string name="settings_imdb_done">Import terminé : %1$d titres.</string>
+    <string name="settings_ratings">Notes</string>
+    <string name="settings_ratings_hint">IMDb, Rotten Tomatoes et Metacritic via OMDb API (omdbapi.com). Sans clé, les pastilles restent des liens.</string>
+    <string name="settings_api_key">Clé d\'API</string>
+    <string name="settings_sync">Synchronisation</string>
+    <string name="settings_sync_hint">Statuts, progression et suppressions envoyés et importés. Connexion par code, sans mot de passe.</string>
+    <string name="settings_sync_auto">Synchro automatique à l\'ouverture de l\'app et environ une minute après chaque modification. Un titre modifié ici depuis sa dernière synchro a toujours le dernier mot.</string>
+    <string name="settings_sync_last">Dernière synchro : %s · automatique à l\'ouverture et après chaque modification.</string>
+    <string name="settings_sync_primary">En cas de désaccord, faire confiance à</string>
+    <string name="settings_client_id">Client ID</string>
+    <string name="settings_client_secret">Client secret</string>
+    <string name="settings_trakt_redirect">Redirect URI à déclarer : urn:ietf:wg:oauth:2.0:oob</string>
+    <string name="settings_autosave">Les modifications sont enregistrées automatiquement.</string>
+    <string name="settings_saved">Enregistré automatiquement.</string>
+    <string name="settings_open">Ouvrir %s</string>
+    <string name="service_code_intro">Ouvrez %s et saisissez :</string>
+    <string name="service_open_site">Ouvrir le site</string>
+    <string name="service_requesting">Demande du code…</string>
+    <string name="service_connected">● Connecté</string>
+    <string name="service_disconnect">Déconnecter</string>
+    <string name="service_sync">Synchroniser</string>
+    <string name="service_not_connected">○ Non connecté</string>
+    <string name="service_connect">Connecter</string>
+
+    <string name="sync_connected_trakt">Connecté à Trakt</string>
+    <string name="sync_connected_simkl">Connecté à Simkl</string>
+    <string name="sync_timeout">Délai dépassé, réessayez.</string>
+    <string name="sync_disconnected">Déconnecté</string>
+
+    <string name="settings_credits">Crédits et licences</string>
+    <string name="settings_credits_hint">Services de données utilisés par l\'application et bibliothèques open source qui la composent.</string>
+    <string name="settings_credits_services">Services de données</string>
+    <string name="settings_credits_libraries">Bibliothèques open source</string>
+    <string name="settings_credits_app">TrackStuff est une application personnelle, non commerciale. Chaque service est utilisé selon ses propres conditions ; affiches et métadonnées appartiennent à leurs propriétaires.</string>
+</resources>

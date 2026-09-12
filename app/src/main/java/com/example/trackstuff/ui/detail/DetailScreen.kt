@@ -1,0 +1,345 @@
+package com.example.trackstuff.ui.detail
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.example.trackstuff.R
+import com.example.trackstuff.domain.LibraryItem
+import com.example.trackstuff.domain.MediaDetails
+import com.example.trackstuff.domain.MediaKind
+import com.example.trackstuff.domain.WatchStatus
+import com.example.trackstuff.ui.components.KindBadge
+import com.example.trackstuff.ui.components.PosterImage
+import com.example.trackstuff.ui.components.RatingChip
+import com.example.trackstuff.ui.components.formatScore
+import com.example.trackstuff.ui.components.openUrl
+import com.example.trackstuff.ui.components.statusColor
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    var confirmRemove by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    LaunchedEffect(state.message) {
+        state.message?.let { m ->
+            val arg = m.argRes?.let { context.getString(it) } ?: m.arg
+            snackbar.showSnackbar(if (arg != null) context.getString(m.res, arg) else context.getString(m.res))
+            vm.consumeMessage()
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
+            TopAppBar(
+                title = { Text(state.details?.title ?: "", maxLines = 1) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back)) } },
+                actions = {
+                    if (state.inLibrary) {
+                        IconButton(onClick = vm::refresh, enabled = !state.refreshing) { Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.detail_refresh)) }
+                        IconButton(onClick = { confirmRemove = true }) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.detail_remove)) }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        val d = state.details
+        when {
+            state.loading && d == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            d == null -> Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(state.error ?: stringResource(R.string.detail_not_found), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedButton(onClick = onBack) { Text(stringResource(R.string.back)) }
+                }
+            }
+            else -> DetailContent(d, state.item, state.refreshing, vm, Modifier.padding(padding))
+        }
+    }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(stringResource(R.string.detail_remove_title)) },
+            text = { Text(stringResource(R.string.detail_remove_text)) },
+            confirmButton = { TextButton(onClick = { confirmRemove = false; vm.remove(); onBack() }) { Text(stringResource(R.string.detail_remove)) } },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
+@Composable
+private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boolean, vm: DetailViewModel, modifier: Modifier) {
+    val context = LocalContext.current
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        // ---- Header: background + poster + title
+        if (d.backdropUrl != null) {
+            Box(Modifier.fillMaxWidth().height(200.dp).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                AsyncImage(model = d.backdropUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+        }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.Bottom) {
+            PosterImage(d.posterUrl, d.title, Modifier.width(110.dp))
+            Column(Modifier.padding(start = 12.dp, bottom = 4.dp)) {
+                Text(d.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                if (d.originalTitle != null && d.originalTitle != d.title) {
+                    Text(d.originalTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val meta = listOfNotNull(
+                    formatDate(d.releaseDate) ?: d.year?.toString(),
+                    d.runtimeMinutes?.let { if (d.isSeries) stringResource(R.string.detail_min_per_episode, it) else "${it / 60}h${(it % 60).toString().padStart(2, '0')}" },
+                    d.numberOfSeasons?.let { pluralStringResource(R.plurals.detail_seasons, it, it) },
+                    d.numberOfEpisodes?.let { stringResource(R.string.detail_episodes, it) },
+                    d.certification,
+                ).joinToString(" · ")
+                Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (d.countries.isNotEmpty()) Text(d.countries.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                d.nextAired?.let { next -> formatDate(next)?.let { Text(stringResource(R.string.detail_next_episode, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) } }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    KindBadge(d.kind)
+                    d.status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically)) }
+                }
+            }
+        }
+        if (d.genres.isNotEmpty()) {
+            Text(d.genres.joinToString(" · "), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+        if (refreshing) Text(stringResource(R.string.detail_updating), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp))
+
+        // ---- Add / tracking
+        Spacer(Modifier.height(8.dp))
+        if (item == null) AddSection(vm) else TrackingSection(item, vm)
+
+        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+
+        // ---- External ratings
+        SectionTitle(stringResource(R.string.detail_ratings))
+        // Via OMDb: IMDb (audience), Tomatometer and Metascore (critics). No RT / Metacritic audience scores in the API.
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val r = d.ratings
+            RatingChip("IMDb", formatScore(r.imdb), d.imdbUrl, Color(0xFFF5C518).let { if (isDark()) it else Color(0xFFB8860B) }, Modifier.weight(1f))
+            RatingChip("Rotten Tomatoes", r.rottenTomatoes?.let { "$it %" }, d.rottenTomatoesUrl, Color(0xFFFA320A), Modifier.weight(1f))
+            RatingChip("Metacritic", r.metacritic?.toString(), d.metacriticUrl, Color(0xFF66CC33).let { if (isDark()) it else Color(0xFF2E7D32) }, Modifier.weight(1f))
+        }
+        if (d.ratings.imdb == null && d.ratings.rottenTomatoes == null && d.ratings.metacritic == null) {
+            Text(
+                stringResource(R.string.detail_ratings_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+        }
+
+        // ---- Credits
+        val c = d.credits
+        if (!c.isEmpty || d.studios.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            SectionTitle(stringResource(R.string.detail_credits))
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (c.directors.isNotEmpty()) CreditLine(stringResource(if (d.isSeries) R.string.credit_creator else R.string.credit_director), c.directors.joinToString(", "))
+                if (c.writers.isNotEmpty()) CreditLine(stringResource(R.string.credit_writer), c.writers.joinToString(", "))
+                if (c.producers.isNotEmpty()) CreditLine(stringResource(R.string.credit_producer), c.producers.joinToString(", "))
+                if (d.studios.isNotEmpty()) CreditLine(stringResource(if (d.isSeries) R.string.credit_network else R.string.credit_studio), d.studios.take(3).joinToString(", "))
+                if (c.cast.isNotEmpty()) CreditLine(stringResource(R.string.credit_cast), c.cast.joinToString(", ") { m -> m.character?.let { "${m.name} ($it)" } ?: m.name })
+            }
+        }
+
+        // ---- Description
+        Spacer(Modifier.height(12.dp))
+        SectionTitle(stringResource(R.string.detail_synopsis))
+        Text(
+            d.overview ?: stringResource(R.string.detail_no_overview),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        val sources = listOfNotNull(
+            d.posterSource?.let { stringResource(R.string.source_poster, it.label) },
+            d.overviewSource?.let { stringResource(R.string.source_overview, it.label) },
+            if (d.ratings.imdb != null || d.ratings.rottenTomatoes != null || d.ratings.metacritic != null) stringResource(R.string.source_ratings) else null,
+        )
+        if (sources.isNotEmpty()) {
+            Text(stringResource(R.string.detail_sources, sources.joinToString(", ")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+        }
+
+        // ---- Links
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            d.imdbUrl?.let { LinkChip("IMDb", it) }
+            d.tmdbUrl?.let { LinkChip("TMDB", it) }
+            d.ids.tvdbId?.let { LinkChip("TVDB", "https://thetvdb.com/dereferrer/${if (d.isSeries) "series" else "movie"}/$it") }
+            d.omdbOrgUrl?.let { LinkChip("OMDB", it) }
+        }
+        Spacer(Modifier.height(32.dp))
+    }
+}
+
+
+@Composable
+private fun isDark() = androidx.compose.foundation.isSystemInDarkTheme()
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+}
+
+@Composable
+private fun LinkChip(label: String, url: String) {
+    val context = LocalContext.current
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.clickable { openUrl(context, url) }) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun AddSection(vm: DetailViewModel) {
+    var menu by remember { mutableStateOf(false) }
+    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { vm.add(WatchStatus.PLANNED) }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.detail_add_planned))
+        }
+        Box {
+            OutlinedButton(onClick = { menu = true }) { Text(stringResource(R.string.detail_add_other)) }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                WatchStatus.entries.filter { it != WatchStatus.PLANNED }.forEach { s ->
+                    DropdownMenuItem(text = { Text(stringResource(s.labelRes)) }, onClick = { menu = false; vm.add(s) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackingSection(item: LibraryItem, vm: DetailViewModel) {
+    val t = item.tracking
+    val d = item.details
+
+    SectionTitle(stringResource(R.string.detail_tracking))
+    // Statut
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        WatchStatus.entries.forEach { s ->
+            FilterChip(
+                selected = t.status == s,
+                onClick = { vm.setStatus(s) },
+                label = { Text(stringResource(s.labelRes)) },
+                leadingIcon = { Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(statusColor(s))) },
+            )
+        }
+    }
+
+    // Progress (series / anime)
+    if (d.isSeries) {
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.detail_progress), style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.weight(1f))
+            Counter("S", t.currentSeason, onChange = { vm.setProgress(it, if (it != t.currentSeason) 0 else t.currentEpisode) })
+            Counter("E", t.currentEpisode, onChange = { vm.setProgress(if (t.currentSeason == 0 && it > 0) 1 else t.currentSeason, it) }, max = d.seasonEpisodes.getOrNull((if (t.currentSeason == 0) 1 else t.currentSeason) - 1))
+            FilledTonalButton(onClick = vm::nextEpisode, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text("+1")
+            }
+        }
+    }
+
+    Spacer(Modifier.height(8.dp))
+
+    val sync = listOfNotNull(t.lastSyncedTrakt?.let { "Trakt" }, t.lastSyncedSimkl?.let { "Simkl" })
+    if (sync.isNotEmpty()) {
+        Text(stringResource(R.string.detail_synced, sync.joinToString(", ")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
+    }
+}
+
+@Composable
+private fun Counter(prefix: String, value: Int, onChange: (Int) -> Unit, max: Int? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { onChange(value - 1) }, enabled = value > 0, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Remove, contentDescription = "-") }
+        // "E3/13" when the number of episodes in the season is known.
+        Text("$prefix$value" + (max?.let { "/$it" } ?: ""), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        IconButton(onClick = { onChange(value + 1) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Add, contentDescription = "+") }
+    }
+}
+
+/** Credits line such as "Director: Someone, Someone". */
+@Composable
+private fun CreditLine(label: String, value: String) {
+    Row {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/** "1997-12-19" → "19 Dec 1997" (localized); null when the date is missing or incomplete. */
+private fun formatDate(iso: String?): String? = iso?.takeIf { it.length == 10 }?.let {
+    runCatching {
+        java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()))
+    }.getOrNull()
+}
