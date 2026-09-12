@@ -195,7 +195,8 @@ class MetadataRepository(
         val sections = mutableListOf<DiscoverSection>()
         val problems = mutableListOf<String>()
 
-        // TMDB returns 20 titles per page: pages are loaded in parallel to fill a row.
+        // TMDB returns 20 titles per page: pages are loaded in parallel to fill a row. A couple of extra pages
+        // are fetched because TMDB reorders lists between requests, which produces duplicates across pages.
         suspend fun tmdbRow(category: String, title: String, media: SectionMedia, call: suspend (TmdbApi, Int) -> List<TmdbSearchResult>) {
             val api = tmdb(s) ?: run { if (problems.none { it.startsWith("TMDB") }) problems += "TMDB: API key not set"; return }
             try {
@@ -209,7 +210,8 @@ class MetadataRepository(
             }
         }
         // Worldwide scope: no TMDB region filter.
-        tmdbRow(CAT_TRENDING, "Trending this week", SectionMedia.MIXED) { api, p -> api.trending("week", s.language, p).results }
+        tmdbRow(CAT_TRENDING, "Trending this week", SectionMedia.MOVIES) { api, p -> api.trending("movie", "week", s.language, p).results.map { r -> r.copy(mediaType = "movie") } }
+        tmdbRow(CAT_TRENDING, "Trending this week", SectionMedia.SERIES) { api, p -> api.trending("tv", "week", s.language, p).results.map { r -> r.copy(mediaType = "tv") } }
         // The movie / TV lists do not return media_type: set it explicitly.
         tmdbRow(CAT_POPULAR, "Popular", SectionMedia.MOVIES) { api, p -> api.popularMovies(s.language, null, p).results.map { r -> r.copy(mediaType = "movie") } }
         tmdbRow(CAT_POPULAR, "Popular", SectionMedia.SERIES) { api, p -> api.popularTv(s.language, p).results.map { r -> r.copy(mediaType = "tv") } }
@@ -715,7 +717,7 @@ class MetadataRepository(
 
         /** Titles per Discover row. TVDB returns 500 per page, TMDB 20 (hence the pagination). */
         const val ROW_SIZE = 100
-        const val TMDB_PAGES = ROW_SIZE / 20
+        const val TMDB_PAGES = ROW_SIZE / 20 + 2
         /** Below this count a row is not shown. */
         const val MIN_ROW = 10
 

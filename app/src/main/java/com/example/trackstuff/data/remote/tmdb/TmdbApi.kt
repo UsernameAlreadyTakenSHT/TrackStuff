@@ -29,8 +29,9 @@ interface TmdbApi {
         @Query("append_to_response") append: String = "external_ids,credits,keywords,content_ratings",
     ): TmdbTv
 
-    @GET("trending/all/{window}")
-    suspend fun trending(@Path("window") window: String = "week", @Query("language") language: String, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
+    /** Trending per type: `type` is `movie` or `tv` (the `all` list mixes people in and is capped at 100 mixed entries). */
+    @GET("trending/{type}/{window}")
+    suspend fun trending(@Path("type") type: String, @Path("window") window: String = "week", @Query("language") language: String, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
 
     @GET("movie/popular")
     suspend fun popularMovies(@Query("language") language: String, @Query("region") region: String?, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
