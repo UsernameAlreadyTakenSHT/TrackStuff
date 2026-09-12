@@ -41,7 +41,7 @@ On Windows without a JDK on the PATH: `JAVA_HOME="C:/Program Files/Android/Andro
 
 | | Service | Used for | Terms / attribution |
 |:-:|---|---|---|
-| <img src="docs/logos/tmdb.svg" height="48" alt=""> | [TMDB](https://www.themoviedb.org/) | Posters, metadata, charts | This product uses the TMDB API but is not endorsed or certified by TMDB. |
+| <img src="docs/logos/tmdb-square.svg" height="48" alt=""> | [TMDB](https://www.themoviedb.org/) | Posters, metadata, charts | This product uses the TMDB API but is not endorsed or certified by TMDB. |
 | <img src="docs/logos/tvdb.png" height="48" alt=""> | [TheTVDB](https://thetvdb.com/) | Posters, metadata, charts | Metadata provided by TheTVDB. Please consider adding missing information or subscribing. |
 | <img src="docs/logos/omdb-api.png" height="32" alt=""> | [OMDb API](https://www.omdbapi.com/) | Ratings, fallback posters | The Open Movie Database — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). |
 | <img src="docs/logos/imdb.svg" height="40" alt=""> | [IMDb datasets](https://developer.imdb.com/non-commercial-datasets/) | Offline ratings, Top 250, credits | Information courtesy of [IMDb](https://www.imdb.com). Used with permission. Non-commercial use only. |
