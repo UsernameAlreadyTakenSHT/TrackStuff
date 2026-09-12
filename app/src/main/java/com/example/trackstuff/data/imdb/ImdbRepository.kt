@@ -9,6 +9,8 @@ import com.example.trackstuff.data.local.ImdbPersonEntity
 import com.example.trackstuff.data.local.ImdbSeasonEntity
 import com.example.trackstuff.data.local.ImdbTitleEntity
 import com.example.trackstuff.data.local.normalizeTitle
+import com.example.trackstuff.data.omdborg.CountingInputStream
+import com.example.trackstuff.data.omdborg.ImportProgress
 import com.example.trackstuff.data.omdborg.OmdbImportState
 import com.example.trackstuff.data.omdborg.OmdbOrgRepository
 import com.example.trackstuff.data.remote.Downloader
@@ -87,6 +89,9 @@ class ImdbRepository(
                 }
                 val n = import(settingsRepo.current().imdbFullDatasets)
                 _state.value = OmdbImportState.Done(n, 0)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancelled by the user: back to idle, no error message.
+                _state.value = OmdbImportState.Idle
             } catch (e: Exception) {
                 Log.e(TAG, "Import failed", e)
                 _state.value = OmdbImportState.Error(e.message ?: e.toString())
@@ -107,11 +112,12 @@ class ImdbRepository(
         else listOf("title.ratings", "title.basics", "title.episode")
         val files = names.associateWith { File(dir, "$it.tsv.gz") }
         names.forEachIndexed { i, n ->
-            Downloader.download("$BASE/$n.tsv.gz", files.getValue(n)) { p -> _state.value = OmdbImportState.Running("Downloading $n (${i + 1}/${names.size})", p) }
+            prog.step("Downloading $n (${i + 1}/${names.size})", 0f)
+            Downloader.download("$BASE/$n.tsv.gz", files.getValue(n)) { p -> prog.update(p) }
         }
 
         // 1. Ratings: only those with enough votes are kept (≈ 100,000 out of 1.7 M).
-        _state.value = OmdbImportState.Running("Reading ratings", null)
+        prog.step("Reading ratings", 0f)
         val ratings = HashMap<String, Pair<Float, Int>>(150_000)
         readTsv(files.getValue("title.ratings")) { cols ->
             val votes = cols.getOrNull(2)?.toIntOrNull() ?: return@readTsv
@@ -122,7 +128,7 @@ class ImdbRepository(
         val previous = HashMap<String, Int>(70_000).apply { dao.allVotes().forEach { put(it.imdbId, it.votes) } }
 
         // 2. Titles: a stream of 11 M lines; only rated movies / series are kept.
-        _state.value = OmdbImportState.Running("Reading titles (this takes a few minutes)", null)
+        prog.step("Reading titles (this takes a few minutes)", 0f)
         dao.clear()
         val kept = HashSet<String>(100_000)
         val batch = ArrayList<ImdbTitleEntity>(2000)
@@ -135,7 +141,7 @@ class ImdbRepository(
                 "tvSeries", "tvMiniSeries" -> true
                 else -> return@readTsv
             }
-            if (c.getOrNull(4) == "1") return@readTsv // adulte
+            if (c.getOrNull(4) == "1") return@readTsv // adult
             val title = c.getOrNull(2)?.takeIf { it != NULL } ?: return@readTsv
             kept += id
             batch += ImdbTitleEntity(
@@ -152,10 +158,7 @@ class ImdbRepository(
                 votes = r.second,
                 prevVotes = previous[id],
             )
-            if (batch.size >= 2000) {
-                dao.insertAll(batch); inserted += batch.size; batch.clear()
-                _state.value = OmdbImportState.Running("Saving titles ($inserted)", null)
-            }
+            if (batch.size >= 2000) { dao.insertAll(batch); inserted += batch.size; batch.clear() }
         }
         if (batch.isNotEmpty()) { dao.insertAll(batch); inserted += batch.size }
         ratings.clear()
@@ -175,7 +178,7 @@ class ImdbRepository(
 
     /** title.episode: tconst, parentTconst, seasonNumber, episodeNumber → episodes per season of the kept series. */
     private suspend fun importEpisodes(file: File, kept: Set<String>) {
-        _state.value = OmdbImportState.Running("Reading episodes", null)
+        prog.step("Reading episodes", 0f)
         val counts = HashMap<String, HashMap<Int, Int>>()
         readTsv(file) { c ->
             val parent = c.getOrNull(1) ?: return@readTsv
@@ -195,7 +198,7 @@ class ImdbRepository(
         val batch = ArrayList<ImdbCrewEntity>(2000)
         suspend fun flush() { if (batch.isNotEmpty()) { dao.insertCrew(batch); batch.clear() } }
 
-        _state.value = OmdbImportState.Running("Reading directors and writers", null)
+        prog.step("Reading directors and writers", 0f)
         readTsv(crewFile) { c ->
             val id = c[0]
             if (id !in kept) return@readTsv
@@ -209,7 +212,7 @@ class ImdbRepository(
         }
         flush()
 
-        _state.value = OmdbImportState.Running("Reading cast (large file, several minutes)", null)
+        prog.step("Reading cast (large file, several minutes)", 0f)
         var seen = 0
         readTsv(principalsFile) { c ->
             val id = c[0]
@@ -228,11 +231,11 @@ class ImdbRepository(
             // characters : ["Neo"] → Neo
             val character = c.getOrNull(5)?.takeIf { it != NULL }?.trim('[', ']')?.split("\",\"")?.firstOrNull()?.trim('"')
             batch += ImdbCrewEntity(tconst = id, nconst = n, role = "actor", character = character, ordering = ordering)
-            if (batch.size >= 2000) { flush(); seen += 2000; _state.value = OmdbImportState.Running("Reading cast ($seen)", null) }
+            if (batch.size >= 2000) { flush(); seen += 2000 }
         }
         flush()
 
-        _state.value = OmdbImportState.Running("Reading names", null)
+        prog.step("Reading names", 0f)
         val persons = ArrayList<ImdbPersonEntity>(2000)
         readTsv(namesFile) { c ->
             val n = c[0]
@@ -245,7 +248,7 @@ class ImdbRepository(
 
     /** title.akas: translated titles of the kept titles (offline search in the phone's language). */
     private suspend fun importAliases(file: File, kept: Set<String>) {
-        _state.value = OmdbImportState.Running("Reading translated titles", null)
+        prog.step("Reading translated titles", 0f)
         dao.clearAliases()
         val batch = ArrayList<ImdbAliasEntity>(2000)
         var n = 0
@@ -254,21 +257,27 @@ class ImdbRepository(
             if (id !in kept) return@readTsv
             val title = c.getOrNull(2)?.takeIf { it != NULL } ?: return@readTsv
             batch += ImdbAliasEntity(tconst = id, title = title, nameNorm = normalizeTitle(title), region = c.getOrNull(3)?.takeIf { it != NULL } ?: "")
-            if (batch.size >= 2000) {
-                dao.insertAliases(batch); n += 2000; batch.clear()
-                _state.value = OmdbImportState.Running("Reading translated titles ($n)", null)
-            }
+            if (batch.size >= 2000) { dao.insertAliases(batch); n += 2000; batch.clear() }
         }
         if (batch.isNotEmpty()) dao.insertAliases(batch)
     }
 
-    /** Reads a gzipped TSV line by line (header skipped). IMDb fields contain neither tabs nor quotes. */
+    private val prog = ImportProgress { _state.value = it }
+
+    /**
+     * Reads a gzipped TSV line by line (header skipped). IMDb fields contain neither tabs nor quotes.
+     * Progress is the share of the compressed file consumed so far.
+     */
     private inline fun readTsv(file: File, block: (List<String>) -> Unit) {
-        BufferedReader(InputStreamReader(GZIPInputStream(BufferedInputStream(FileInputStream(file), 1 shl 16)), Charsets.UTF_8), 1 shl 16).use { r ->
+        val size = file.length().toFloat()
+        val counting = CountingInputStream(BufferedInputStream(FileInputStream(file), 1 shl 16))
+        BufferedReader(InputStreamReader(GZIPInputStream(counting), Charsets.UTF_8), 1 shl 16).use { r ->
             r.readLine() // header
+            var lines = 0
             while (true) {
                 val line = r.readLine() ?: break
                 block(line.split('\t'))
+                if (++lines % 20_000 == 0 && size > 0) prog.update(counting.count / size)
             }
         }
     }

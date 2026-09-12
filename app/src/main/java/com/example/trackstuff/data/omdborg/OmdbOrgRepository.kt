@@ -37,7 +37,8 @@ private const val TAG = "OmdbOrg"
 /** Progress of the dump import. */
 sealed class OmdbImportState {
     data object Idle : OmdbImportState()
-    data class Running(val step: String, val progress: Float?) : OmdbImportState()
+    /** [etaSeconds] is estimated from the elapsed time of the current step; null while unknown. */
+    data class Running(val step: String, val progress: Float?, val etaSeconds: Long? = null) : OmdbImportState()
     data class Done(val titles: Int, val aliases: Int) : OmdbImportState()
     data class Error(val message: String) : OmdbImportState()
 }
@@ -82,6 +83,9 @@ class OmdbOrgRepository(
                 }
                 val (titles, aliases) = import()
                 _state.value = OmdbImportState.Done(titles, aliases)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancelled by the user: back to idle, no error message.
+                _state.value = OmdbImportState.Idle
             } catch (e: Exception) {
                 Log.e(TAG, "Import failed", e)
                 _state.value = OmdbImportState.Error(e.message ?: e.toString())
@@ -111,7 +115,8 @@ class OmdbOrgRepository(
         files.forEachIndexed { i, name ->
             val f = File(dir, "$name.csv.bz2")
             try {
-                Downloader.download("$DATA_BASE$name.csv.bz2", f) { p -> _state.value = OmdbImportState.Running("Downloading $name (${i + 1}/${files.size})", p) }
+                prog.step("Downloading $name (${i + 1}/${files.size})", 0f)
+                Downloader.download("$DATA_BASE$name.csv.bz2", f) { p -> prog.update(p) }
                 downloaded[name] = f
             } catch (e: Exception) {
                 if (name in optional) Log.w(TAG, "Optional dump $name unavailable: ${e.message}") else throw e
@@ -119,18 +124,18 @@ class OmdbOrgRepository(
         }
 
         // 2. Lookup tables read into memory
-        _state.value = OmdbImportState.Running("Reading titles", null)
+        prog.step("Reading titles", 0f)
         val titles = HashMap<Int, TitleBuilder>(100_000)
         read(downloaded.getValue("all_movies")) { r -> r.id()?.let { titles[it] = TitleBuilder(r[1] ?: return@read, false, yearOf(r.getOrNull(3))) } }
         read(downloaded.getValue("all_series")) { r -> r.id()?.let { titles[it] = TitleBuilder(r[1] ?: return@read, true, yearOf(r.getOrNull(3))) } }
 
-        _state.value = OmdbImportState.Running("Reading IMDb ids", null)
+        prog.step("Reading IMDb ids", 0f)
         val imdb = HashMap<Int, String>(90_000)
         read(downloaded.getValue("movie_links")) { r ->
             if (r[0] == "imdbmovie") r.getOrNull(2)?.toIntOrNull()?.let { id -> r[1]?.let { imdb[id] = it } }
         }
 
-        _state.value = OmdbImportState.Running("Reading posters", null)
+        prog.step("Reading posters", 0f)
         val images = HashMap<Int, Pair<Int, Int?>>(70_000)
         read(downloaded.getValue("image_ids")) { r ->
             if (r.getOrNull(2) == "Movie") {
@@ -140,14 +145,14 @@ class OmdbOrgRepository(
             }
         }
 
-        _state.value = OmdbImportState.Running("Reading genres", null)
+        prog.step("Reading genres", 0f)
         val genres = HashMap<Int, MutableList<Int>>()
         read(downloaded.getValue("movie_categories")) { r ->
             val cat = r.getOrNull(1)?.toIntOrNull() ?: return@read
             if (cat in KEPT_GENRES) r.id()?.let { genres.getOrPut(it) { mutableListOf() }.add(cat) }
         }
 
-        _state.value = OmdbImportState.Running("Reading synopses", null)
+        prog.step("Reading synopses", 0f)
         val abstractsEn = HashMap<Int, String>(8_000)
         read(downloaded.getValue("movie_abstracts_en")) { r -> r.id()?.let { id -> r.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { abstractsEn[id] = it } } }
         val abstractsLocal = HashMap<Int, String>()
@@ -155,7 +160,7 @@ class OmdbOrgRepository(
             read(f) { r -> r.id()?.let { id -> r.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { abstractsLocal[id] = it } } }
         }
 
-        _state.value = OmdbImportState.Running("Reading countries and runtimes", null)
+        prog.step("Reading countries and runtimes", 0f)
         val countries = HashMap<Int, MutableList<String>>()
         read(downloaded.getValue("movie_countries")) { r -> r.id()?.let { id -> r.getOrNull(1)?.let { countries.getOrPut(id) { mutableListOf() }.add(it) } } }
         val votes = HashMap<Int, Pair<Float, Int>>(45_000)
@@ -164,7 +169,7 @@ class OmdbOrgRepository(
         read(downloaded.getValue("movie_details")) { r -> r.id()?.let { id -> r.getOrNull(1)?.toIntOrNull()?.takeIf { it > 0 }?.let { runtimes[id] = it } } }
 
         // 3. Title insertion
-        _state.value = OmdbImportState.Running("Saving titles", 0f)
+        prog.step("Saving titles", 0f)
         dao.clearAliases(); dao.clearCast(); dao.clearTitles()
         val entities = ArrayList<OmdbTitleEntity>(1000)
         var inserted = 0
@@ -188,13 +193,13 @@ class OmdbOrgRepository(
             )
             if (entities.size >= 1000) {
                 dao.insertTitles(entities); inserted += entities.size; entities.clear()
-                _state.value = OmdbImportState.Running("Saving titles", inserted.toFloat() / titles.size)
+                prog.update(inserted.toFloat() / titles.size)
             }
         }
         if (entities.isNotEmpty()) { dao.insertTitles(entities); inserted += entities.size; entities.clear() }
 
         // 4. Aliases (translated titles) — inserted while reading
-        _state.value = OmdbImportState.Running("Saving translated titles", null)
+        prog.step("Saving translated titles", 0f)
         val aliases = ArrayList<OmdbAliasEntity>(2000)
         var aliasCount = 0
         read(downloaded.getValue("all_movie_aliases_iso")) { r ->
@@ -202,18 +207,15 @@ class OmdbOrgRepository(
             if (!titles.containsKey(id)) return@read
             val name = r.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return@read
             aliases += OmdbAliasEntity(titleId = id, name = name, nameNorm = normalizeTitle(name), language = r.getOrNull(2) ?: "", official = if (r.getOrNull(3) == "1") 1 else 0)
-            if (aliases.size >= 2000) {
-                dao.insertAliases(aliases); aliasCount += aliases.size; aliases.clear()
-                _state.value = OmdbImportState.Running("Saving translated titles ($aliasCount)", null)
-            }
+            if (aliases.size >= 2000) { dao.insertAliases(aliases); aliasCount += aliases.size; aliases.clear() }
         }
         if (aliases.isNotEmpty()) { dao.insertAliases(aliases); aliasCount += aliases.size }
 
         // 5. Credits: all_people (names) then all_casts (person, job, role, order), useful jobs only
-        _state.value = OmdbImportState.Running("Reading people", null)
+        prog.step("Reading people", 0f)
         val people = HashMap<Int, String>(320_000)
         read(downloaded.getValue("all_people")) { r -> r.id()?.let { id -> r.getOrNull(1)?.let { people[id] = it } } }
-        _state.value = OmdbImportState.Running("Reading cast", null)
+        prog.step("Saving cast", 0f)
         val cast = ArrayList<OmdbCastEntity>(2000)
         var castCount = 0
         read(downloaded.getValue("all_casts")) { r ->
@@ -224,10 +226,7 @@ class OmdbOrgRepository(
             if (role == "actor" && position > 10) return@read
             val name = r.getOrNull(1)?.toIntOrNull()?.let { people[it] } ?: return@read
             cast += OmdbCastEntity(titleId = id, name = name, role = role, character = r.getOrNull(3)?.takeIf { it.isNotBlank() }, position = position)
-            if (cast.size >= 2000) {
-                dao.insertCast(cast); castCount += cast.size; cast.clear()
-                _state.value = OmdbImportState.Running("Saving cast ($castCount)", null)
-            }
+            if (cast.size >= 2000) { dao.insertCast(cast); castCount += cast.size; cast.clear() }
         }
         if (cast.isNotEmpty()) dao.insertCast(cast)
 
@@ -240,9 +239,15 @@ class OmdbOrgRepository(
 
     private fun yearOf(date: String?): Int? = date?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }?.toInt()?.takeIf { it > 1800 }
 
+    private val prog = ImportProgress { _state.value = it }
+
+    /** Streams a bz2 CSV dump; progress is the share of the compressed file consumed so far. */
     private inline fun read(file: File, block: (List<String?>) -> Unit) {
-        BufferedReader(InputStreamReader(BZip2CompressorInputStream(BufferedInputStream(FileInputStream(file), 1 shl 16), true), Charsets.UTF_8), 1 shl 16).use { r ->
-            MysqlCsvReader(r).forEachRecord { block(it) }
+        val size = file.length().toFloat()
+        val counting = CountingInputStream(BufferedInputStream(FileInputStream(file), 1 shl 16))
+        BufferedReader(InputStreamReader(BZip2CompressorInputStream(counting, true), Charsets.UTF_8), 1 shl 16).use { r ->
+            var rows = 0
+            MysqlCsvReader(r).forEachRecord { block(it); if (++rows % 5_000 == 0 && size > 0) prog.update(counting.count / size) }
         }
     }
 

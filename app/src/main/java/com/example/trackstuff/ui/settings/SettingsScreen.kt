@@ -253,6 +253,12 @@ private fun LocalDatasetBlock(hint: String, titleCount: Int, lastImportAt: Long?
                 Text(state.step, style = MaterialTheme.typography.bodySmall)
                 if (state.progress != null) LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
                 else LinearProgressIndicator(Modifier.fillMaxWidth())
+                // Percentage and ETA of the current step, in small print.
+                val detail = listOfNotNull(
+                    state.progress?.let { "${(it * 100).toInt()} %" },
+                    state.etaSeconds?.let { stringResource(R.string.import_eta, formatEta(it)) },
+                ).joinToString(" · ")
+                if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             }
             else -> {
@@ -323,6 +329,13 @@ private fun ServiceRow(
         }
         (service.lastResultRes?.let { stringResource(it) } ?: service.lastResult)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
+}
+
+/** "45 s", "3 min", "1 h 05" — coarse on purpose, the estimate is rough. */
+private fun formatEta(seconds: Long): String = when {
+    seconds < 60 -> "${seconds.coerceAtLeast(1)} s"
+    seconds < 3600 -> "${seconds / 60} min"
+    else -> "${seconds / 3600} h ${"%02d".format((seconds % 3600) / 60)}"
 }
 
 private fun formatBytes(bytes: Long): String = when {
