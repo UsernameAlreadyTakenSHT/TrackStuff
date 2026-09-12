@@ -168,5 +168,6 @@
     <string name="settings_credits_hint">Data services used by this app and open-source libraries it is built with.</string>
     <string name="settings_credits_services">Data services</string>
     <string name="settings_credits_libraries">Open-source libraries</string>
+    <string name="settings_credits_libraries_license">All under the Apache License 2.0. Tap a name to open its project page.</string>
     <string name="settings_credits_app">TrackStuff is a personal, non-commercial app. Each service is used under its own terms; posters and metadata belong to their respective owners.</string>
 </resources>

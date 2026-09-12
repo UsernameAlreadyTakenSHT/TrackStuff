@@ -37,13 +37,30 @@ On Windows without a JDK on the PATH: `JAVA_HOME="C:/Program Files/Android/Andro
 
 ## Credits & licenses
 
-Data services: TMDB (this product uses the TMDB API but is not endorsed or certified by TMDB),
-TheTVDB (metadata provided by TheTVDB), OMDb API (CC BY-NC 4.0), omdb.org (Open Media Database,
-community data under free licenses), IMDb datasets (information courtesy of IMDb, used with
-permission, non-commercial use), Rotten Tomatoes / Metacritic (scores via OMDb API), Trakt, Simkl.
+### Data services
 
-Open-source libraries (all Apache License 2.0): Kotlin & kotlinx, AndroidX & Jetpack Compose
-(Material 3, Room, DataStore, Navigation 3, Lifecycle), OkHttp, Retrofit, Moshi, Coil, Apache Commons
-Compress, Material Components for Android.
+| Service | Used for | Terms / attribution |
+|---|---|---|
+| [TMDB](https://www.themoviedb.org/) | Posters, metadata, charts | This product uses the TMDB API but is not endorsed or certified by TMDB. |
+| [TheTVDB](https://thetvdb.com/) | Posters, metadata, charts | Metadata provided by TheTVDB. Please consider adding missing information or subscribing. |
+| [OMDb API](https://www.omdbapi.com/) | Ratings, fallback posters | The Open Movie Database — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). |
+| [IMDb datasets](https://developer.imdb.com/non-commercial-datasets/) | Offline ratings, Top 250, credits | Information courtesy of [IMDb](https://www.imdb.com). Used with permission. Non-commercial use only. |
+| [omdb.org](https://www.omdb.org/) | Offline posters, synopses, search | Open Media Database — community data under free licenses; images under their own licenses. |
+| [Rotten Tomatoes](https://www.rottentomatoes.com/) · [Metacritic](https://www.metacritic.com/) | Scores | Values via OMDb API; the chips open the official sites. |
+| [Trakt](https://trakt.tv/) | Sync | Trakt API terms. |
+| [Simkl](https://simkl.com/) | Sync | Simkl API terms. |
 
-TrackStuff is a personal, non-commercial app. Posters and metadata belong to their respective owners.
+### Open-source libraries
+
+All under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+| Library | Author |
+|---|---|
+| [Kotlin & kotlinx](https://github.com/JetBrains/kotlin) | JetBrains |
+| [AndroidX & Jetpack Compose](https://developer.android.com/jetpack) (Material 3, Room, DataStore, Navigation 3, Lifecycle) | Android Open Source Project |
+| [OkHttp](https://github.com/square/okhttp) · [Retrofit](https://github.com/square/retrofit) · [Moshi](https://github.com/square/moshi) | Square |
+| [Coil](https://github.com/coil-kt/coil) | Coil Contributors |
+| [Apache Commons Compress](https://commons.apache.org/proper/commons-compress/) | Apache Software Foundation |
+
+TrackStuff is a personal, non-commercial app. Each service is used under its own terms; posters and
+metadata belong to their respective owners.

@@ -323,46 +323,73 @@ private fun formatBytes(bytes: Long): String = when {
 
 // ---------------------------------------------------------------- Credits and licenses
 
-/** One credit row: clickable name, license or attribution mention. */
-private data class Credit(val name: String, val note: String, val url: String)
+/** One data service: what it provides to the app, the attribution wording it requires, its site. */
+private data class ServiceCredit(val name: String, val role: String, val note: String, val url: String)
+
+/** One open-source library (all Apache License 2.0). */
+private data class LibraryCredit(val name: String, val author: String, val url: String)
 
 /** Data services, with the attribution wording each of them requires. */
 private val SERVICES = listOf(
-    Credit("TMDB", "This product uses the TMDB API but is not endorsed or certified by TMDB.", "https://www.themoviedb.org/"),
-    Credit("TheTVDB", "Metadata provided by TheTVDB. Please consider adding missing information or subscribing.", "https://thetvdb.com/"),
-    Credit("OMDb API", "The Open Movie Database — CC BY-NC 4.0.", "https://www.omdbapi.com/"),
-    Credit("omdb.org", "Open Media Database — community data under free licenses (see site); images under their own licenses.", "https://www.omdb.org/"),
-    Credit("IMDb datasets", "Information courtesy of IMDb (https://www.imdb.com). Used with permission. Non-commercial use.", "https://developer.imdb.com/non-commercial-datasets/"),
-    Credit("Rotten Tomatoes · Metacritic", "Scores via OMDb API; links open the official sites.", "https://www.rottentomatoes.com/"),
-    Credit("Trakt", "Sync via the Trakt API, under Trakt's API terms.", "https://trakt.tv/"),
-    Credit("Simkl", "Sync via the Simkl API, under Simkl's API terms.", "https://simkl.com/"),
+    ServiceCredit("TMDB", "Posters · metadata · charts", "This product uses the TMDB API but is not endorsed or certified by TMDB.", "https://www.themoviedb.org/"),
+    ServiceCredit("TheTVDB", "Posters · metadata · charts", "Metadata provided by TheTVDB. Please consider adding missing information or subscribing.", "https://thetvdb.com/"),
+    ServiceCredit("OMDb API", "Ratings · fallback posters", "The Open Movie Database — CC BY-NC 4.0.", "https://www.omdbapi.com/"),
+    ServiceCredit("IMDb datasets", "Offline ratings · Top 250 · credits", "Information courtesy of IMDb (https://www.imdb.com). Used with permission. Non-commercial use.", "https://developer.imdb.com/non-commercial-datasets/"),
+    ServiceCredit("omdb.org", "Offline posters · synopses · search", "Open Media Database — community data under free licenses; images under their own licenses.", "https://www.omdb.org/"),
+    ServiceCredit("Rotten Tomatoes · Metacritic", "Scores", "Scores via OMDb API; the chips open the official sites.", "https://www.rottentomatoes.com/"),
+    ServiceCredit("Trakt", "Sync", "Sync through the Trakt API, under Trakt's API terms.", "https://trakt.tv/"),
+    ServiceCredit("Simkl", "Sync", "Sync through the Simkl API, under Simkl's API terms.", "https://simkl.com/"),
 )
 
-/** Bundled open-source libraries. */
 private val LIBRARIES = listOf(
-    Credit("Kotlin & kotlinx (coroutines, serialization)", "Apache License 2.0 — JetBrains", "https://github.com/JetBrains/kotlin"),
-    Credit("AndroidX & Jetpack Compose (Material 3, Room, DataStore, Navigation 3, Lifecycle)", "Apache License 2.0 — The Android Open Source Project", "https://developer.android.com/jetpack"),
-    Credit("OkHttp", "Apache License 2.0 — Square, Inc.", "https://github.com/square/okhttp"),
-    Credit("Retrofit", "Apache License 2.0 — Square, Inc.", "https://github.com/square/retrofit"),
-    Credit("Moshi", "Apache License 2.0 — Square, Inc.", "https://github.com/square/moshi"),
-    Credit("Coil", "Apache License 2.0 — Coil Contributors", "https://github.com/coil-kt/coil"),
-    Credit("Apache Commons Compress", "Apache License 2.0 — The Apache Software Foundation", "https://commons.apache.org/proper/commons-compress/"),
-    Credit("Material Components for Android", "Apache License 2.0 — Google LLC", "https://github.com/material-components/material-components-android"),
+    LibraryCredit("Kotlin & kotlinx", "JetBrains", "https://github.com/JetBrains/kotlin"),
+    LibraryCredit("AndroidX & Jetpack Compose", "Android Open Source Project", "https://developer.android.com/jetpack"),
+    LibraryCredit("Material 3", "Google", "https://m3.material.io/"),
+    LibraryCredit("Room · DataStore · Navigation 3", "Android Open Source Project", "https://developer.android.com/jetpack"),
+    LibraryCredit("OkHttp", "Square", "https://github.com/square/okhttp"),
+    LibraryCredit("Retrofit", "Square", "https://github.com/square/retrofit"),
+    LibraryCredit("Moshi", "Square", "https://github.com/square/moshi"),
+    LibraryCredit("Coil", "Coil Contributors", "https://github.com/coil-kt/coil"),
+    LibraryCredit("Apache Commons Compress", "Apache Software Foundation", "https://commons.apache.org/proper/commons-compress/"),
 )
 
+/** A service as a small tonal card: name + role tag, attribution line, link. */
 @Composable
-private fun CreditRow(c: Credit) {
+private fun ServiceCard(c: ServiceCredit) {
     val context = LocalContext.current
-    Column(Modifier.fillMaxWidth().clickable { openUrl(context, c.url) }.padding(vertical = 2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(c.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(12.dp))
+    androidx.compose.material3.Surface(
+        onClick = { openUrl(context, c.url) },
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(c.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            androidx.compose.material3.Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
+                Text(c.role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            }
+            Text(c.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(c.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-/** "Credits & licenses" dialog: data services and open-source libraries. */
+/** A library as a clickable chip; the license is common to all of them and stated once above. */
+@Composable
+private fun LibraryChip(l: LibraryCredit) {
+    val context = LocalContext.current
+    androidx.compose.material3.AssistChip(
+        onClick = { openUrl(context, l.url) },
+        label = { Text(l.name) },
+        trailingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(12.dp)) },
+    )
+}
+
+/** "Credits & licenses" dialog: data services as cards, open-source libraries as chips. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CreditsDialog(onDismiss: () -> Unit) {
     AlertDialog(
@@ -370,15 +397,16 @@ private fun CreditsDialog(onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
         title = { Text(stringResource(R.string.settings_credits)) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.settings_credits_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.settings_credits_services), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                SERVICES.forEach { CreditRow(it) }
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.settings_credits_libraries), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                LIBRARIES.forEach { CreditRow(it) }
-                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.settings_credits_services), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                SERVICES.forEach { ServiceCard(it) }
+                Text(stringResource(R.string.settings_credits_libraries), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+                Text(stringResource(R.string.settings_credits_libraries_license), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LIBRARIES.forEach { LibraryChip(it) }
+                }
+                androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Text(stringResource(R.string.settings_credits_app), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
