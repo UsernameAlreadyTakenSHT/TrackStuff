@@ -63,6 +63,13 @@ data class ImdbAliasEntity(
     val region: String,
 )
 
+/**
+ * Poster URL resolved online (OMDb API, TVDB) for a title known only by its IMDb id (Top 250, Popular now).
+ * Kept for good so that the lookup is never repeated; an empty [url] records a failed lookup, retried after a while.
+ */
+@Entity(tableName = "imdb_poster")
+data class ImdbPosterEntity(@PrimaryKey val imdbId: String, val url: String, val checkedAt: Long)
+
 data class ImdbVotes(val imdbId: String, val votes: Int)
 
 /** Credit row joined with the name. */
@@ -138,10 +145,16 @@ interface ImdbDao {
 
     @Query("DELETE FROM imdb_title")
     suspend fun clear()
+
+    @Query("SELECT * FROM imdb_poster WHERE imdbId = :imdbId")
+    suspend fun poster(imdbId: String): ImdbPosterEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun savePoster(p: ImdbPosterEntity)
 }
 
 /** Separate IMDb database, like omdb.org: never touched by the library migrations. */
-@Database(entities = [ImdbTitleEntity::class, ImdbSeasonEntity::class, ImdbCrewEntity::class, ImdbPersonEntity::class, ImdbAliasEntity::class], version = 3, exportSchema = false)
+@Database(entities = [ImdbTitleEntity::class, ImdbSeasonEntity::class, ImdbCrewEntity::class, ImdbPersonEntity::class, ImdbAliasEntity::class, ImdbPosterEntity::class], version = 4, exportSchema = false)
 abstract class ImdbDatabase : RoomDatabase() {
     abstract fun imdbDao(): ImdbDao
 
@@ -153,9 +166,16 @@ abstract class ImdbDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the resolved-poster table. */
+        private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `imdb_poster` (`imdbId` TEXT NOT NULL, `url` TEXT NOT NULL, `checkedAt` INTEGER NOT NULL, PRIMARY KEY(`imdbId`))")
+            }
+        }
+
         fun build(context: Context): ImdbDatabase =
             Room.databaseBuilder(context, ImdbDatabase::class.java, "imdb.db")
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

@@ -270,6 +270,14 @@ class ImdbRepository(
 
     // ------------------------------------------------------------------ Queries
 
+    /** Poster URL resolved earlier for this IMDb id: the URL, "" for a failed lookup still worth retrying later, null if unknown. */
+    suspend fun cachedPoster(imdbId: String): String? {
+        val p = dao.poster(imdbId) ?: return null
+        return if (p.url.isEmpty() && System.currentTimeMillis() - p.checkedAt > POSTER_RETRY_MS) null else p.url
+    }
+
+    suspend fun savePoster(imdbId: String, url: String?) = dao.savePoster(com.example.trackstuff.data.local.ImdbPosterEntity(imdbId, url ?: "", System.currentTimeMillis()))
+
     /** IMDb rating and votes of a title, without network. */
     suspend fun rating(imdbId: String): Pair<Float, Int>? = dao.byId(imdbId)?.let { it.rating to it.votes }
 
@@ -370,6 +378,8 @@ class ImdbRepository(
 
     companion object {
         const val BASE = "https://datasets.imdbws.com"
+        /** A failed poster lookup is retried after this delay. */
+        const val POSTER_RETRY_MS = 7 * 24 * 60 * 60 * 1000L
         /** Minimum votes to keep a title (≈ 65,000 movies and series). */
         const val MIN_VOTES = 1000
         /** Chart thresholds, like IMDb: 25,000 votes for movies, 10,000 for series. */

@@ -30,8 +30,10 @@ object Network {
     val CACHE_TIERS_MB = listOf(200, 500, 1024, 2048, 5120, 0)
     const val DEFAULT_CACHE_MB = 1024
     private const val JSON_TTL_HOURS = 24
-    /** Detail pages and OMDb lookups change slowly; a longer lifetime also protects the OMDb daily quota (1,000 requests). */
-    private const val DETAIL_TTL_DAYS = 7
+    /** Movie pages and OMDb lookups change slowly; a long lifetime also protects the OMDb daily quota (1,000 requests). */
+    private const val DETAIL_TTL_DAYS = 30
+    /** Series pages carry the next episode date and the status: refreshed more often. */
+    private const val SERIES_TTL_DAYS = 7
     private const val IMAGE_TTL_DAYS = 30
     private const val OFFLINE_MAX_STALE_DAYS = 30
     private const val UNLIMITED_BYTES = Long.MAX_VALUE / 4
@@ -131,9 +133,15 @@ object Network {
     }
     private val LIST_PATHS = listOf("/trending/", "/popular", "/now_playing", "/on_the_air", "/search", "/filter", "/find/")
 
+    private fun isSeriesRequest(request: Request): Boolean {
+        val p = request.url.encodedPath
+        return "/tv/" in p || "/series/" in p || (request.url.host == "www.omdbapi.com" && request.url.queryParameter("type") == "series")
+    }
+
     private fun ttlSeconds(request: Request) = when {
         request.url.host in IMAGE_HOSTS -> IMAGE_TTL_DAYS * 86400
         isListRequest(request) -> JSON_TTL_HOURS * 3600
+        isSeriesRequest(request) -> SERIES_TTL_DAYS * 86400
         else -> DETAIL_TTL_DAYS * 86400
     }
 

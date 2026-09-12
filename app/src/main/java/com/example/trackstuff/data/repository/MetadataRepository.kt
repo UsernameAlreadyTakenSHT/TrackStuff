@@ -305,13 +305,17 @@ class MetadataRepository(
 
     /** Poster of a title known only by its IMDb id (Top 250): OMDb API, otherwise TVDB. Results are cached. */
     suspend fun posterByImdb(imdbId: String, isSeries: Boolean): String? {
+        // Resolved once, then kept in the IMDb database: no request at all on later visits.
+        imdb.cachedPoster(imdbId)?.let { return it.ifEmpty { null } }
         val s = settingsRepo.current()
-        if (s.hasOmdb) runCatching { omdb.byImdbId(s.omdbApiKey, imdbId).takeIf { it.ok }?.posterUrl() }.getOrNull()?.let { return it }
-        return runCatching {
-            val hits = tvdb(s)?.byRemoteId(imdbId)?.data ?: return null
-            val rec = hits.firstNotNullOfOrNull { if (isSeries) it.series else it.movie } ?: hits.firstNotNullOfOrNull { it.series ?: it.movie }
-            TvdbApi.imageUrl(rec?.image)
-        }.getOrNull()
+        val url = (if (s.hasOmdb) runCatching { omdb.byImdbId(s.omdbApiKey, imdbId).takeIf { it.ok }?.posterUrl() }.getOrNull() else null)
+            ?: runCatching {
+                val hits = tvdb(s)?.byRemoteId(imdbId)?.data
+                val rec = hits?.firstNotNullOfOrNull { if (isSeries) it.series else it.movie } ?: hits?.firstNotNullOfOrNull { it.series ?: it.movie }
+                TvdbApi.imageUrl(rec?.image)
+            }.getOrNull()
+        runCatching { imdb.savePoster(imdbId, url) }
+        return url
     }
 
     // ------------------------------------------------------------------ Detail page

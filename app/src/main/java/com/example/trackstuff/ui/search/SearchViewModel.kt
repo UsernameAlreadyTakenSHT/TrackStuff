@@ -32,30 +32,36 @@ class SearchViewModel(private val metadata: MetadataRepository, private val libr
     fun setQuery(q: String) {
         _state.update { it.copy(query = q) }
         job?.cancel()
-        if (q.trim().length < 2) {
+        if (q.trim().length < MIN_QUERY) {
             _state.update { it.copy(results = emptyList(), searched = false, problems = emptyList()) }
             return
         }
         // Automatic search after a short typing pause.
         job = viewModelScope.launch {
-            delay(450)
+            delay(DEBOUNCE_MS)
             search()
         }
     }
 
     fun search() {
         val q = _state.value.query.trim()
-        if (q.length < 2) return
+        if (q.length < MIN_QUERY) return
         job?.cancel()
         job = viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             val outcome = try {
                 metadata.search(q)
             } catch (e: Exception) {
-                com.example.trackstuff.data.repository.SearchOutcome(emptyList(), null, listOf(e.message ?: "Erreur"))
+                com.example.trackstuff.data.repository.SearchOutcome(emptyList(), null, listOf(e.message ?: "Error"))
             }
             val inLib = outcome.results.mapNotNull { r -> library.findExisting(r.ids, r.isSeries)?.let { r to it.localId } }.toMap()
             _state.update { it.copy(results = outcome.results, source = outcome.source, problems = outcome.problems, loading = false, inLibrary = inLib, searched = true) }
         }
+    }
+
+    companion object {
+        /** Fewer intermediate queries while typing: at least 3 characters, 600 ms pause. */
+        const val MIN_QUERY = 3
+        const val DEBOUNCE_MS = 600L
     }
 }
