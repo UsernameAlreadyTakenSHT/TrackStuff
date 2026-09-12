@@ -16,3 +16,7 @@ local.properties
 
 # Archives locales
 *.zip
+
+# Release signing keystore: never committed; back it up somewhere safe.
+keystore/
+*.jks

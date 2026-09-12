@@ -7,9 +7,10 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
 }
 
-// Clés d'API optionnelles lues depuis local.properties (jamais versionné) :
+// Optional API keys read from local.properties (never committed):
 //   TMDB_API_KEY, TVDB_API_KEY, OMDB_API_KEY, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, SIMKL_CLIENT_ID, SIMKL_CLIENT_SECRET
-// Elles servent de valeurs par défaut ; l'écran Paramètres de l'app permet de les saisir/écraser.
+// They are the defaults; the Settings screen lets the user enter / override them.
+// Release signing (also in local.properties): RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD.
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -40,11 +41,26 @@ android {
         buildConfigField("String", "SIMKL_CLIENT_SECRET", secret("SIMKL_CLIENT_SECRET"))
     }
 
+    // Release signing: only when a keystore is configured in local.properties; otherwise the release build
+    // stays unsigned (it can still be built, just not installed).
+    val storeFile = localProps.getProperty("RELEASE_STORE_FILE")?.let { rootProject.file(it) }
+    if (storeFile != null && storeFile.exists()) {
+        signingConfigs {
+            create("release") {
+                this.storeFile = storeFile
+                storePassword = localProps.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProps.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProps.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
             }
+            if (storeFile != null && storeFile.exists()) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

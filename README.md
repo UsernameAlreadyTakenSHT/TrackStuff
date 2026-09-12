@@ -72,7 +72,19 @@ Without any key, search and pages still work on the omdb.org and IMDb data impor
 
 ```
 ./gradlew :app:assembleDebug      # APK: app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest  # unit tests (API parsing, CSV reader, TVDB adapters, null lists)
+./gradlew :app:assembleRelease    # signed APK: app/build/outputs/apk/release/app-release.apk (see below)
+./gradlew :app:testDebugUnitTest  # unit tests (API parsing, CSV reader, sync logic, refresh limiter)
+```
+
+Release builds are signed with a keystore declared in `local.properties` (git-ignored) — generate one
+with `keytool -genkeypair -keystore keystore/trackstuff-release.jks -alias trackstuff -keyalg RSA -keysize 2048 -validity 10000`
+and keep a backup of it: an app signed with another key cannot update an installed one.
+
+```properties
+RELEASE_STORE_FILE=keystore/trackstuff-release.jks
+RELEASE_STORE_PASSWORD=…
+RELEASE_KEY_ALIAS=trackstuff
+RELEASE_KEY_PASSWORD=…
 ```
 
 On Windows without a JDK on the PATH: `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`.
