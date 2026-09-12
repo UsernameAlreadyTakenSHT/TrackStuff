@@ -44,7 +44,7 @@ several databases, large offline datasets, and Trakt / Simkl sync. Minimalist by
   (`date_from` on Simkl), following both services' published rules — no background polling. A title
   changed locally since its last sync wins; when both services are connected, the one chosen in Settings
   is trusted first. Imported titles are enriched automatically.
-- **Localized**: English by default, French translation; page language and region follow the phone.
+- **English UI**; page language (synopses, titles) and region follow the phone.
 - **Credits & licenses** dialog at the bottom of Settings (data services attributions, open-source
   libraries).
 
