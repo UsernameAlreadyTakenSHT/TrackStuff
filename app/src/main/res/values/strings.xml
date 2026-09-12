@@ -100,7 +100,12 @@
     <string name="settings_language">Language</string>
     <string name="settings_region">Region</string>
     <string name="settings_backup">Backup</string>
-    <string name="settings_backup_hint">Your library (pages, statuses, progress) as a JSON file: keep a copy or move it to another phone. Importing merges with what is already here.</string>
+    <string name="settings_backup_hint">JSON files to keep a copy or move to another phone. Library import merges with what is already here.</string>
+    <string name="backup_library">Library</string>
+    <string name="backup_settings">Settings (keys and sign-ins)</string>
+    <string name="backup_settings_hint">API keys, Trakt / Simkl credentials and sign-in tokens, preferences. The file contains secrets: move it, then delete it.</string>
+    <string name="settings_exported">Settings exported.</string>
+    <string name="settings_imported">Settings imported.</string>
     <string name="backup_export">Export</string>
     <string name="backup_import">Import</string>
     <string name="backup_exported">Library exported.</string>

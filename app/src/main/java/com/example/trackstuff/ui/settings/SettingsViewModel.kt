@@ -117,6 +117,31 @@ class SettingsViewModel(
         }
     }
 
+    /** Writes keys, sync credentials and tokens as JSON to [uri]. */
+    fun exportSettings(resolver: android.content.ContentResolver, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val msg = try {
+                val json = settingsRepo.exportSettings()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
+                R.string.settings_exported to null
+            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
+        }
+    }
+
+    /** Restores keys, credentials and tokens from a settings export, then reloads the form. */
+    fun importSettings(resolver: android.content.ContentResolver, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val msg = try {
+                val json = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Cannot open file") }
+                settingsRepo.importSettings(json)
+                _state.update { it.copy(form = settingsRepo.current(), saved = true) }
+                R.string.settings_imported to null
+            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
+        }
+    }
+
     fun consumeBackupMessage() = _state.update { it.copy(backupMessageRes = null, backupMessageArg = null) }
 
     // ------------------------------------------------------------------ omdb.org

@@ -24,6 +24,7 @@ fun defaultLanguage(): String = java.util.Locale.getDefault().let { l -> if (l.c
 fun defaultRegion(): String = java.util.Locale.getDefault().country.ifBlank { "US" }
 
 /** API keys and preferences. BuildConfig values (local.properties) serve as defaults. */
+@com.squareup.moshi.JsonClass(generateAdapter = true)
 data class AppSettings(
     val tmdbApiKey: String = "",
     val tvdbApiKey: String = "",
@@ -170,6 +171,21 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveTvdbToken(token: String, expiresAt: Long) {
         context.dataStore.edit { p -> p[Keys.TVDB_TOKEN] = token; p[Keys.TVDB_TOKEN_EXP] = expiresAt }
+    }
+
+    // ---- Settings backup (keys, sync credentials, sign-in tokens, preferences)
+
+    suspend fun exportSettings(): String {
+        val s = current(); val t = currentTokens()
+        return SettingsBackup.encode(SettingsBackup(settings = s, traktAccessToken = t.traktAccessToken, traktRefreshToken = t.traktRefreshToken, traktExpiresAt = t.traktExpiresAt, simklAccessToken = t.simklAccessToken))
+    }
+
+    /** Restores keys and preferences, and the sign-in tokens when the file has them (the sync state restarts from scratch). */
+    suspend fun importSettings(json: String) {
+        val b = SettingsBackup.decode(json)
+        save(b.settings)
+        if (b.traktAccessToken.isNotBlank()) { clearTrakt(); saveTraktTokens(b.traktAccessToken, b.traktRefreshToken, b.traktExpiresAt) }
+        if (b.simklAccessToken.isNotBlank()) { clearSimkl(); saveSimklToken(b.simklAccessToken) }
     }
 
     suspend fun saveTraktTokens(access: String, refresh: String, expiresAt: Long) {

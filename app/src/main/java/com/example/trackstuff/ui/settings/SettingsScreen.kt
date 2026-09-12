@@ -76,6 +76,8 @@ fun SettingsScreen(vm: SettingsViewModel) {
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { vm.exportLibrary(context.contentResolver, it) } }
     val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> uri?.let { vm.importLibrary(context.contentResolver, it) } }
+    val exportSettingsLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { vm.exportSettings(context.contentResolver, it) } }
+    val importSettingsLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> uri?.let { vm.importSettings(context.contentResolver, it) } }
     val backupMessage = state.backupMessageRes?.let { res -> state.backupMessageArg?.let { stringResource(res, it) } ?: stringResource(res) }
     androidx.compose.runtime.LaunchedEffect(backupMessage) { if (backupMessage != null) { snackbar.showSnackbar(backupMessage); vm.consumeBackupMessage() } }
 
@@ -92,9 +94,17 @@ fun SettingsScreen(vm: SettingsViewModel) {
             }
 
             Section(stringResource(R.string.settings_backup), stringResource(R.string.settings_backup_hint)) {
+                Text(stringResource(R.string.backup_library), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { exportLauncher.launch("trackstuff-library.json") }) { Text(stringResource(R.string.backup_export)) }
                     OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text(stringResource(R.string.backup_import)) }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.backup_settings), style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.backup_settings_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { exportSettingsLauncher.launch("trackstuff-settings.json") }) { Text(stringResource(R.string.backup_export)) }
+                    OutlinedButton(onClick = { importSettingsLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text(stringResource(R.string.backup_import)) }
                 }
             }
 
