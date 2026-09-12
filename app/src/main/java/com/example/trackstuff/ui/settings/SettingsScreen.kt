@@ -71,7 +71,15 @@ fun SettingsScreen(vm: SettingsViewModel) {
     var showCredits by remember { mutableStateOf(false) }
     if (showCredits) CreditsDialog(onDismiss = { showCredits = false })
 
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }) { padding ->
+    // Library backup: system file dialogs, the ViewModel does the reading / writing.
+    val context = LocalContext.current
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { vm.exportLibrary(context.contentResolver, it) } }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> uri?.let { vm.importLibrary(context.contentResolver, it) } }
+    val backupMessage = state.backupMessageRes?.let { res -> state.backupMessageArg?.let { stringResource(res, it) } ?: stringResource(res) }
+    androidx.compose.runtime.LaunchedEffect(backupMessage) { if (backupMessage != null) { snackbar.showSnackbar(backupMessage); vm.consumeBackupMessage() } }
+
+    Scaffold(snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) }, topBar = { TopAppBar(title = { Text(stringResource(R.string.settings_title)) }) }) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -80,6 +88,13 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Field(stringResource(R.string.settings_language), f.language, { v -> vm.edit { it.copy(language = v) } }, Modifier.weight(1f), placeholder = com.example.trackstuff.data.settings.defaultLanguage())
                     Field(stringResource(R.string.settings_region), f.region, { v -> vm.edit { it.copy(region = v) } }, Modifier.weight(1f), placeholder = com.example.trackstuff.data.settings.defaultRegion())
+                }
+            }
+
+            Section(stringResource(R.string.settings_backup), stringResource(R.string.settings_backup_hint)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { exportLauncher.launch("trackstuff-library.json") }) { Text(stringResource(R.string.backup_export)) }
+                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text(stringResource(R.string.backup_import)) }
                 }
             }
 
@@ -111,7 +126,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
                     FilterChip(selected = !f.imdbFullDatasets, onClick = { vm.edit { it.copy(imdbFullDatasets = false) } }, label = { Text(stringResource(R.string.settings_imdb_standard)) })
                     FilterChip(selected = f.imdbFullDatasets, onClick = { vm.edit { it.copy(imdbFullDatasets = true) } }, label = { Text(stringResource(R.string.settings_imdb_full)) })
                 }
-                state.imdbInfo.let { i -> LocalDatasetBlock(stringResource(if (f.imdbFullDatasets) R.string.settings_imdb_hint_full else R.string.settings_imdb_hint), i.titleCount, i.lastImportAt, i.nextAllowedAt, i.canDownload, imdbImportState, onImport = vm::importImdb, onCancel = vm::cancelImdbImport) }
+                state.imdbInfo.let { i -> LocalDatasetBlock(stringResource(if (f.imdbFullDatasets) R.string.settings_imdb_hint_full else R.string.settings_imdb_hint) + (if (i.formatOutdated) "\n" + stringResource(R.string.settings_imdb_outdated) else ""), i.titleCount, i.lastImportAt, i.nextAllowedAt, i.canDownload, imdbImportState, onImport = vm::importImdb, onCancel = vm::cancelImdbImport) }
             }
 
             Section(stringResource(R.string.settings_ratings), stringResource(R.string.settings_ratings_hint)) {

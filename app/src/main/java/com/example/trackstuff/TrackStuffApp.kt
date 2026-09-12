@@ -13,6 +13,7 @@ import com.example.trackstuff.data.repository.MetadataRepository
 import com.example.trackstuff.data.settings.SettingsRepository
 import com.example.trackstuff.data.sync.SimklSyncService
 import com.example.trackstuff.data.sync.SyncCoordinator
+import kotlinx.coroutines.launch
 import com.example.trackstuff.data.sync.TraktSyncService
 
 /** Dependency container (manual injection, one instance per application). */
@@ -25,6 +26,7 @@ class AppContainer(context: Context) {
     val imdb = ImdbRepository(context, imdbDatabase.imdbDao(), settings, omdbOrg)
     val metadata = MetadataRepository(settings, omdbOrg, imdb)
     val library = LibraryRepository(database.mediaDao(), metadata, settings)
+    val backup = com.example.trackstuff.data.repository.LibraryBackup(database.mediaDao(), library)
     val trakt = TraktSyncService(settings, library)
     val simkl = SimklSyncService(settings, library)
     val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
@@ -41,6 +43,9 @@ class TrackStuffApp : Application(), coil.ImageLoaderFactory {
         // The HTTP cache must exist before the first request; synchronous (fast) read of the chosen size.
         val cacheMb = kotlinx.coroutines.runBlocking { container.settings.current().httpCacheMb }
         Network.init(this, cacheMb)
+        // Explicit-refresh limits survive restarts.
+        com.example.trackstuff.data.remote.RefreshLimiter.load(kotlinx.coroutines.runBlocking { container.settings.refreshLimits() })
+        com.example.trackstuff.data.remote.RefreshLimiter.persist = { map -> container.appScope.launch { container.settings.saveRefreshLimits(map) } }
     }
 
     /** Coil uses the shared HTTP client: posters and JSON responses in the same cache, same size setting. */

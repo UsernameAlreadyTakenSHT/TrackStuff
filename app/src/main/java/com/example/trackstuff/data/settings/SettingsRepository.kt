@@ -69,6 +69,8 @@ data class AuthTokens(
     val omdbOrgImportedAt: Long = 0,
     /** Date of the last IMDb dataset import (0 = never). */
     val imdbImportedAt: Long = 0,
+    /** Importer format version of the current IMDb data; an older value allows a re-import before the monthly limit. */
+    val imdbFormatVersion: Int = 0,
 ) {
     val traktConnected get() = traktAccessToken.isNotBlank()
     val simklConnected get() = simklAccessToken.isNotBlank()
@@ -101,8 +103,10 @@ class SettingsRepository(private val context: Context) {
         val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
         val SYNC_PRIMARY = stringPreferencesKey("sync_primary")
         val PENDING_REMOVALS = stringPreferencesKey("pending_removals")
+        val REFRESH_LIMITS = stringPreferencesKey("refresh_limits")
         val OMDB_ORG_IMPORTED_AT = longPreferencesKey("omdb_org_imported_at")
         val IMDB_IMPORTED_AT = longPreferencesKey("imdb_imported_at")
+        val IMDB_FORMAT = androidx.datastore.preferences.core.intPreferencesKey("imdb_format_version")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -138,6 +142,7 @@ class SettingsRepository(private val context: Context) {
             lastSyncAt = p[Keys.LAST_SYNC_AT] ?: 0,
             omdbOrgImportedAt = p[Keys.OMDB_ORG_IMPORTED_AT] ?: 0,
             imdbImportedAt = p[Keys.IMDB_IMPORTED_AT] ?: 0,
+            imdbFormatVersion = p[Keys.IMDB_FORMAT] ?: 0,
         )
     }
 
@@ -179,6 +184,14 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { p -> p[Keys.TRAKT_ACTIVITIES] = at }
     }
 
+    // ---- Explicit refresh timestamps (once an hour per target)
+
+    suspend fun refreshLimits(): Map<String, Long> = com.example.trackstuff.data.remote.RefreshLimiter.decode(context.dataStore.data.first()[Keys.REFRESH_LIMITS] ?: "")
+
+    suspend fun saveRefreshLimits(map: Map<String, Long>) {
+        context.dataStore.edit { p -> p[Keys.REFRESH_LIMITS] = com.example.trackstuff.data.remote.RefreshLimiter.encode(map) }
+    }
+
     // ---- Removals to propagate to Trakt / Simkl
 
     suspend fun pendingRemovals(): List<com.example.trackstuff.data.sync.PendingRemoval> =
@@ -210,7 +223,7 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { p -> p[Keys.OMDB_ORG_IMPORTED_AT] = at }
     }
 
-    suspend fun saveImdbImportedAt(at: Long) {
-        context.dataStore.edit { p -> p[Keys.IMDB_IMPORTED_AT] = at }
+    suspend fun saveImdbImportedAt(at: Long, formatVersion: Int) {
+        context.dataStore.edit { p -> p[Keys.IMDB_IMPORTED_AT] = at; p[Keys.IMDB_FORMAT] = formatVersion }
     }
 }

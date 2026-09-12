@@ -39,8 +39,9 @@ import java.util.zip.GZIPInputStream
 private const val TAG = "Imdb"
 private const val NULL = "\\N"
 
-data class ImdbInfo(val titleCount: Int, val lastImportAt: Long?, val hasFullData: Boolean = false) {
-    val nextAllowedAt: Long? get() = lastImportAt?.plus(OmdbOrgRepository.MIN_INTERVAL_MS)
+data class ImdbInfo(val titleCount: Int, val lastImportAt: Long?, val hasFullData: Boolean = false, val formatOutdated: Boolean = false) {
+    /** Null when a re-import is allowed right away (empty database, or data produced by an older importer). */
+    val nextAllowedAt: Long? get() = if (formatOutdated) null else lastImportAt?.plus(OmdbOrgRepository.MIN_INTERVAL_MS)
     /** An empty database can always be downloaded; a populated one at most once a month. */
     val canDownload: Boolean get() = titleCount == 0 || nextAllowedAt?.let { System.currentTimeMillis() >= it } ?: true
 }
@@ -66,7 +67,11 @@ class ImdbRepository(
     private val _state = MutableStateFlow<OmdbImportState>(OmdbImportState.Idle)
     val state: StateFlow<OmdbImportState> = _state
 
-    suspend fun info(): ImdbInfo = ImdbInfo(dao.count(), settingsRepo.currentTokens().imdbImportedAt.takeIf { it > 0 }, dao.crewCount() > 0)
+    suspend fun info(): ImdbInfo {
+        val t = settingsRepo.currentTokens()
+        val count = dao.count()
+        return ImdbInfo(count, t.imdbImportedAt.takeIf { it > 0 }, dao.crewCount() > 0, formatOutdated = count > 0 && t.imdbFormatVersion < FORMAT_VERSION)
+    }
 
     suspend fun isAvailable(): Boolean = dao.count() > 0
 
@@ -163,7 +168,7 @@ class ImdbRepository(
             dao.clearCrew(); dao.clearPersons(); dao.clearAliases()
         }
 
-        settingsRepo.saveImdbImportedAt(System.currentTimeMillis())
+        settingsRepo.saveImdbImportedAt(System.currentTimeMillis(), FORMAT_VERSION)
         dir.deleteRecursively()
         inserted
     }
@@ -378,6 +383,11 @@ class ImdbRepository(
 
     companion object {
         const val BASE = "https://datasets.imdbws.com"
+        /**
+         * Bumped whenever the importer extracts new data from the same files (e.g. series creators): data
+         * imported by an older version may then be refreshed before the monthly limit.
+         */
+        const val FORMAT_VERSION = 2
         /** A failed poster lookup is retried after this delay. */
         const val POSTER_RETRY_MS = 7 * 24 * 60 * 60 * 1000L
         /** Minimum votes to keep a title (≈ 65,000 movies and series). */

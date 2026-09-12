@@ -57,8 +57,8 @@ object Network {
 
     fun labelFor(sizeMb: Int): String = when {
         sizeMb <= 0 -> "Unlimited"
-        sizeMb >= 1024 -> "${sizeMb / 1024} Go"
-        else -> "$sizeMb Mo"
+        sizeMb >= 1024 -> "${sizeMb / 1024} GB"
+        else -> "$sizeMb MB"
     }
 
     private fun bytesFor(sizeMb: Int) = if (sizeMb <= 0) UNLIMITED_BYTES else sizeMb * 1024L * 1024L

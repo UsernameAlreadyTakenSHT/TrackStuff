@@ -45,6 +45,9 @@ data class SettingsUiState(
     val imdbInfo: ImdbInfo = ImdbInfo(0, null),
     /** Bytes used by the cache (responses + posters). */
     val cacheUsedBytes: Long = 0,
+    /** Result of the last export / import, shown once in a snackbar. */
+    @androidx.annotation.StringRes val backupMessageRes: Int? = null,
+    val backupMessageArg: String? = null,
 )
 
 class SettingsViewModel(
@@ -54,6 +57,7 @@ class SettingsViewModel(
     private val omdbOrg: OmdbOrgRepository,
     private val imdb: ImdbRepository,
     private val sync: com.example.trackstuff.data.sync.SyncCoordinator,
+    private val backup: com.example.trackstuff.data.repository.LibraryBackup,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state
@@ -86,6 +90,34 @@ class SettingsViewModel(
 
     fun clearCache() { Network.clearCache(); refreshCacheUsage() }
     fun refreshCacheUsage() = _state.update { it.copy(cacheUsedBytes = Network.cacheSizeBytes()) }
+
+    // ------------------------------------------------------------------ Library backup
+
+    /** Writes the library as JSON to [uri] (picked with the system file dialog). */
+    fun exportLibrary(resolver: android.content.ContentResolver, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val msg = try {
+                val json = backup.export()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
+                R.string.backup_exported to null
+            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
+        }
+    }
+
+    /** Reads a JSON export from [uri] and merges it into the library. */
+    fun importLibrary(resolver: android.content.ContentResolver, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val msg = try {
+                val json = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Cannot open file") }
+                val r = backup.import(json)
+                R.string.backup_imported to "${r.added} / ${r.updated} / ${r.skipped}"
+            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
+        }
+    }
+
+    fun consumeBackupMessage() = _state.update { it.copy(backupMessageRes = null, backupMessageArg = null) }
 
     // ------------------------------------------------------------------ omdb.org
 

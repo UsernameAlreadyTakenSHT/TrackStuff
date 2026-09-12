@@ -28,6 +28,7 @@ import com.squareup.moshi.Types
     indices = [Index("tmdbId"), Index("imdbId"), Index("tvdbId"), Index("status"), Index("kind")],
 )
 @TypeConverters(MediaConverters::class)
+@JsonClass(generateAdapter = true)
 data class MediaEntity(
     @PrimaryKey(autoGenerate = true) val localId: Long = 0,
     val tmdbId: Int?,
