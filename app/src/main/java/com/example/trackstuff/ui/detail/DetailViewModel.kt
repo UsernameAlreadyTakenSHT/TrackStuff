@@ -99,13 +99,26 @@ class DetailViewModel(
         }
     }
 
-    fun setStatus(status: WatchStatus) = updateTracking { it.copy(status = status) }
+    /**
+     * Status chosen by the user. "Watching" is never chosen directly — it follows the progress — so setting
+     * a series to planned resets its progress, and completing it moves the progress to the last known episode.
+     */
+    fun setStatus(status: WatchStatus) = updateTracking { t ->
+        val seasons = _state.value.item?.details?.seasonEpisodes.orEmpty()
+        when (status) {
+            WatchStatus.PLANNED -> t.copy(status = status, currentSeason = 0, currentEpisode = 0)
+            WatchStatus.COMPLETED -> if (seasons.isNotEmpty()) t.copy(status = status, currentSeason = seasons.size, currentEpisode = seasons.last()) else t.copy(status = status)
+            WatchStatus.WATCHING -> t.copy(status = if (t.currentSeason > 0) WatchStatus.WATCHING else t.status)
+        }
+    }
 
     fun setRating(rating: Int?) = updateTracking { it.copy(userRating = rating) }
     fun setNotes(notes: String) = updateTracking { it.copy(notes = notes) }
 
+    /** Progress drives the status: something marked → watching, nothing marked → planned (a completed title stays completed until touched). */
     fun setProgress(season: Int, episode: Int) = updateTracking {
-        it.copy(currentSeason = season.coerceAtLeast(0), currentEpisode = episode.coerceAtLeast(0), status = if (it.status == WatchStatus.PLANNED && season > 0) WatchStatus.WATCHING else it.status)
+        val s = season.coerceAtLeast(0); val e = episode.coerceAtLeast(0)
+        it.copy(currentSeason = s, currentEpisode = e, status = if (s > 0 || e > 0) WatchStatus.WATCHING else WatchStatus.PLANNED)
     }
 
     /**

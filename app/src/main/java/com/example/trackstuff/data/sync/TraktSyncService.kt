@@ -30,7 +30,6 @@ private const val TAG = "TraktSync"
  *  - Plan to watch  ↔ watchlist
  *  - Watching       → history of watched episodes (current S/E)
  *  - Completed      ↔ history (watched movie / whole show)
- *  - On hold / Dropped → removed from the watchlist (no Trakt equivalent)
  *  - Note        ↔ ratings (1-10)
  */
 class TraktSyncService(
@@ -147,7 +146,7 @@ class TraktSyncService(
     /**
      * Removes locally the titles synced with Trakt that are no longer in the watchlist nor in the history.
      * Only statuses that imply a presence on Trakt are concerned (plan to watch, completed, watching with
-     * watched episodes): "on hold" and "dropped" do not exist on Trakt and are already absent there.
+     * watched episodes).
      */
     private suspend fun reconcileRemovals(present: Set<Long>): Int {
         var removed = 0
@@ -253,13 +252,8 @@ class TraktSyncService(
         if (wlMovies.isNotEmpty() || wlShows.isNotEmpty()) {
             api.addToWatchlist(TraktSyncBody(wlMovies.map { TraktSyncMovie(ids(it)) }, wlShows.map { TraktSyncShow(ids(it)) }))
         }
-        val rmMovies = movies.filter { it.tracking.status == WatchStatus.ON_HOLD || it.tracking.status == WatchStatus.DROPPED }
-        val rmShows = shows.filter { it.tracking.status == WatchStatus.ON_HOLD || it.tracking.status == WatchStatus.DROPPED }
-        if (rmMovies.isNotEmpty() || rmShows.isNotEmpty()) {
-            api.removeFromWatchlist(TraktSyncBody(rmMovies.map { TraktSyncMovie(ids(it)) }, rmShows.map { TraktSyncShow(ids(it)) }))
-        }
 
-        // Historique
+        // History
         val histMovies = movies.filter { it.tracking.status == WatchStatus.COMPLETED }
         val histShows = shows.filter { it.tracking.status == WatchStatus.COMPLETED || (it.tracking.status == WatchStatus.WATCHING && it.tracking.currentSeason > 0) }
         if (histMovies.isNotEmpty() || histShows.isNotEmpty()) {

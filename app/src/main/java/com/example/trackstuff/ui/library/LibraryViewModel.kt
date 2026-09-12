@@ -12,9 +12,9 @@ import kotlinx.coroutines.flow.stateIn
 
 /**
  * Library in three rows:
- *  - Continue watching: in progress (and on hold), most recently changed first;
+ *  - Continue watching: in progress, most recently changed first;
  *  - Start watching: planned;
- *  - History: completed (and dropped), most recent first.
+ *  - History: completed, most recent first.
  */
 data class LibraryUiState(
     val continueWatching: List<LibraryItem> = emptyList(),
@@ -27,9 +27,9 @@ class LibraryViewModel(library: LibraryRepository) : ViewModel() {
     val state: StateFlow<LibraryUiState> = library.items.map { items ->
         val byRecent = items.sortedByDescending { it.tracking.updatedAt }
         LibraryUiState(
-            continueWatching = byRecent.filter { it.tracking.status == WatchStatus.WATCHING || it.tracking.status == WatchStatus.ON_HOLD },
+            continueWatching = byRecent.filter { it.tracking.status == WatchStatus.WATCHING },
             startWatching = byRecent.filter { it.tracking.status == WatchStatus.PLANNED },
-            history = byRecent.filter { it.tracking.status == WatchStatus.COMPLETED || it.tracking.status == WatchStatus.DROPPED },
+            history = byRecent.filter { it.tracking.status == WatchStatus.COMPLETED },
             total = items.size,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())

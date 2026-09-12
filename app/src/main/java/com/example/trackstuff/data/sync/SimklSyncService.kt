@@ -158,13 +158,14 @@ class SimklSyncService(
 
     private fun SimklMedia.ids() = ExternalIds(tmdbId = ids.tmdbInt(), imdbId = ids.imdb, tvdbId = ids.tvdbInt(), simklId = ids.simkl)
 
-    /** Null for an unknown status (e.g. a title removed from the list in a delta): left untouched. */
+    /**
+     * Null for a status the app does not track (dropped / not interesting, or a title removed from the list
+     * in a delta): left untouched. Simkl's "hold" is a started show, i.e. watching here.
+     */
     private fun statusFromSimkl(s: String?): WatchStatus? = when (s) {
         "plantowatch" -> WatchStatus.PLANNED
-        "watching" -> WatchStatus.WATCHING
+        "watching", "hold" -> WatchStatus.WATCHING
         "completed" -> WatchStatus.COMPLETED
-        "hold" -> WatchStatus.ON_HOLD
-        "dropped", "notinteresting" -> WatchStatus.DROPPED
         else -> null
     }
 
@@ -172,8 +173,6 @@ class SimklSyncService(
         WatchStatus.PLANNED -> "plantowatch"
         WatchStatus.WATCHING -> if (isMovie) "plantowatch" else "watching"
         WatchStatus.COMPLETED -> "completed"
-        WatchStatus.ON_HOLD -> if (isMovie) "plantowatch" else "hold"
-        WatchStatus.DROPPED -> "dropped"
     }
 
     private fun LibraryItem.locallyNewer() = tracking.lastSyncedSimkl?.let { tracking.updatedAt > it } ?: (tracking.lastSyncedSimkl == null && tracking.updatedAt != tracking.addedAt)

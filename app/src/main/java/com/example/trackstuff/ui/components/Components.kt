@@ -118,8 +118,6 @@ fun statusColor(status: WatchStatus): Color = when (status) {
     WatchStatus.PLANNED -> Color(0xFF607D8B)
     WatchStatus.WATCHING -> Color(0xFF2196F3)
     WatchStatus.COMPLETED -> Color(0xFF4CAF50)
-    WatchStatus.ON_HOLD -> Color(0xFFFF9800)
-    WatchStatus.DROPPED -> Color(0xFFF44336)
 }
 
 /** Compact card for grids (library, results). */

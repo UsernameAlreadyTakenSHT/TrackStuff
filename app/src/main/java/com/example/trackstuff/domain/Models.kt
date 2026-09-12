@@ -14,13 +14,14 @@ enum class MediaKind(@StringRes val labelRes: Int) {
     val isEpisodic: Boolean get() = this == SERIES || this == ANIME
 }
 
-/** Tracking status (aligned with the Trakt / Simkl lists). */
+/**
+ * Tracking status. WATCHING is derived from progress (at least one episode marked) rather than chosen:
+ * a title is planned until it is started, then watching, then completed. Movies are planned or completed.
+ */
 enum class WatchStatus(@StringRes val labelRes: Int) {
     PLANNED(R.string.status_planned),
     WATCHING(R.string.status_watching),
-    COMPLETED(R.string.status_completed),
-    ON_HOLD(R.string.status_on_hold),
-    DROPPED(R.string.status_dropped);
+    COMPLETED(R.string.status_completed);
 }
 
 /** Origin of a piece of data: used to show where the poster / description came from. */

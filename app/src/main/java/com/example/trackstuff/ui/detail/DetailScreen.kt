@@ -269,9 +269,8 @@ private fun AddSection(vm: DetailViewModel) {
         Box {
             OutlinedButton(onClick = { menu = true }) { Text(stringResource(R.string.detail_add_other)) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                WatchStatus.entries.filter { it != WatchStatus.PLANNED }.forEach { s ->
-                    DropdownMenuItem(text = { Text(stringResource(s.labelRes)) }, onClick = { menu = false; vm.add(s) })
-                }
+                // Adding straight as "completed" (a movie already seen, a show already finished); watching comes from progress.
+                DropdownMenuItem(text = { Text(stringResource(WatchStatus.COMPLETED.labelRes)) }, onClick = { menu = false; vm.add(WatchStatus.COMPLETED) })
             }
         }
     }
@@ -283,11 +282,13 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel) {
     val d = item.details
 
     SectionTitle(stringResource(R.string.detail_tracking))
-    // Statut
+    // Status: planned / watching / completed. Watching is shown for series only and follows the progress
+    // (first episode marked), it cannot be picked by hand.
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        WatchStatus.entries.forEach { s ->
+        WatchStatus.entries.filter { d.isSeries || it != WatchStatus.WATCHING }.forEach { s ->
             FilterChip(
                 selected = t.status == s,
+                enabled = s != WatchStatus.WATCHING,
                 onClick = { vm.setStatus(s) },
                 label = { Text(stringResource(s.labelRes)) },
                 leadingIcon = { Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(statusColor(s))) },

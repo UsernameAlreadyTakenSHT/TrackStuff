@@ -17,8 +17,6 @@
     <string name="status_planned">Plan to watch</string>
     <string name="status_watching">Watching</string>
     <string name="status_completed">Completed</string>
-    <string name="status_on_hold">On hold</string>
-    <string name="status_dropped">Dropped</string>
 
     <!-- Library -->
     <string name="library_title">My library</string>
