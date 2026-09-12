@@ -1,126 +1,38 @@
-# TrackStuff — movies, series, documentaries & anime tracker
+# TrackStuff
 
-Android app (Kotlin, Jetpack Compose, Room) to track what you watch, with pages enriched from
-several databases, large offline datasets, and Trakt / Simkl sync. Minimalist by design.
+Minimal Android app to track movies, series, documentaries and anime. Kotlin, Jetpack Compose, Room.
 
-## Features
+- **Library**: Continue watching · Start watching · History, with season/episode progress.
+- **Discover**: trending, popular and new titles from TMDB, TVDB, IMDb (Top 250, Popular now) and omdb.org.
+- **Search & detail pages** with a fallback cascade: TMDB → TVDB → OMDb API → IMDb datasets → omdb.org
+  (the last two are imported locally and work offline). Ratings from IMDb, Rotten Tomatoes, Metacritic.
+- **Sync** with Trakt and Simkl, automatic and two-way (statuses, progress, removals).
+- Everything is cached; explicit refreshes are limited to once an hour. Library export / import as JSON.
 
-- **Library** (offline) in three rows — **Continue watching** (watching / on hold), **Start watching**
-  (planned), **History** (completed / dropped). Categories Movie / Series / Documentary / Anime
-  (detected automatically), season/episode progress with automatic season rollover and completion.
-  No personal ratings or notes — deliberately minimal.
-- **Discover**: pick a source (TMDB / TVDB / IMDb / omdb.org) and a type (Movies / Series); all of the
-  source's lists show up:
-  - TMDB — trending this week, popular, in theaters / on the air (100 titles, paginated);
-  - TVDB — popular (TVDB score), new this year (100 titles);
-  - IMDb — **Popular now** (titles that gained the most votes since the previous import, an offline
-    approximation of MovieMeter / TVMeter; recent releases by votes until a second import exists) and
-    **Top 250** movies / series (IMDb's weighted formula);
-  - omdb.org — most voted, top rated (community votes).
-- **Search** with a fallback cascade: **TMDB → TVDB → OMDb API → IMDb datasets → omdb.org**; the last
-  two work offline.
-- **Detail page**: poster and synopsis from TMDB first, then TVDB, then OMDb API, then IMDb datasets,
-  then omdb.org (each field shows its source); dead poster links (OMDb API) and TVDB "missing image"
-  placeholders are skipped so the next source can fill in; full release date, countries, runtime,
-  seasons, age rating; **ratings** IMDb, Rotten Tomatoes, Metacritic (values via OMDb API, or IMDb
-  datasets for the IMDb rating) — each chip opens the site; **credits** (director, or creator for
-  series — never episode directors; writer, producer, studio / network, 5 leading actors with roles);
-  next episode date for series; links IMDb · TMDB · TVDB · OMDB.
-- **omdb.org offline** (~26 MB, free license): ~95,000 movies/series, translated titles, IMDb ids,
-  posters, genres, synopses, cast and roles, directors, writers, countries, runtimes, community votes.
-- **IMDb datasets offline** (official datasets, once a month at most — no incremental updates exist),
-  filtered to movies/series with ≥ 1,000 votes (~65,000):
-  - *Standard* (~280 MB): `title.ratings`, `title.basics`, `title.episode` → ratings and vote counts
-    without any key, episodes per season, Top 250, Popular now;
-  - *Full* (~1.9 GB, 30–45 min): + `title.crew`, `title.principals`, `name.basics`, `title.akas` →
-    cast and roles, directors, writers, series creators, translated titles (offline search in your
-    language).
-  - Data priority offline: IMDb datasets before omdb.org.
-- **Cache**: JSON responses (24 h) and posters (30 days) in a shared OkHttp cache, served offline; size
-  tiers 200 MB → 5 GB or unlimited (1 GB by default). Trakt and Simkl are never cached.
-- **Trakt.tv and Simkl sync** (device-code / PIN OAuth, no server), two-way and automatic: statuses,
-  progress and removals pushed about a minute after a local change; remote changes pulled when the app
-  opens (at most every 15 min). Each sync starts with the activities endpoint and only fetches deltas
-  (`date_from` on Simkl), following both services' published rules — no background polling. A title
-  changed locally since its last sync wins; when both services are connected, the one chosen in Settings
-  is trusted first. Imported titles are enriched automatically.
-- **English UI**; page language (synopses, titles) and region follow the phone.
-- **Credits & licenses** dialog at the bottom of Settings (data services attributions, open-source
-  libraries).
+## Setup
 
-## API keys
-
-Everything is optional; each missing source is simply skipped in the cascade. Keys are entered in
-**Settings** (saved automatically) or put in `local.properties` (git-ignored) as defaults:
+Put your keys in `local.properties` (git-ignored) or enter them in Settings. All are optional: a
+missing source is simply skipped.
 
 ```properties
-TMDB_API_KEY=…            # https://www.themoviedb.org/settings/api (v3 key or v4 read token)
+TMDB_API_KEY=…            # https://www.themoviedb.org/settings/api (v3 key or v4 read access token)
 TVDB_API_KEY=…            # https://thetvdb.com/dashboard/account/apikey
-OMDB_API_KEY=…            # https://www.omdbapi.com/apikey.aspx (OMDb API: ratings, poster/synopsis fallback)
+OMDB_API_KEY=…            # https://www.omdbapi.com/apikey.aspx
 TRAKT_CLIENT_ID=…         # https://trakt.tv/oauth/applications (redirect: urn:ietf:wg:oauth:2.0:oob)
 TRAKT_CLIENT_SECRET=…
 SIMKL_CLIENT_ID=…         # https://simkl.com/settings/developer/
 SIMKL_CLIENT_SECRET=…
 ```
 
-Without any key, search and pages still work on the omdb.org and IMDb data imported locally.
-
-> omdb.org ≠ OMDb API: the first is the Open Media Database (omdb.org, free data dumps); the second is
-> omdbapi.com (an IMDb aggregator, source of the Rotten Tomatoes / Metacritic scores).
-
 ## Build
 
 ```
-./gradlew :app:assembleDebug      # APK: app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:assembleRelease    # signed APK: app/build/outputs/apk/release/app-release.apk (see below)
-./gradlew :app:testDebugUnitTest  # unit tests (API parsing, CSV reader, sync logic, refresh limiter)
-```
-
-Release builds are signed with a keystore declared in `local.properties` (git-ignored) — generate one
-with `keytool -genkeypair -keystore keystore/trackstuff-release.jks -alias trackstuff -keyalg RSA -keysize 2048 -validity 10000`
-and keep a backup of it: an app signed with another key cannot update an installed one.
-
-```properties
-RELEASE_STORE_FILE=keystore/trackstuff-release.jks
-RELEASE_STORE_PASSWORD=…
-RELEASE_KEY_ALIAS=trackstuff
-RELEASE_KEY_PASSWORD=…
+./gradlew :app:assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:assembleRelease    # signed if RELEASE_STORE_FILE / passwords are set in local.properties
+./gradlew :app:testDebugUnitTest
 ```
 
 On Windows without a JDK on the PATH: `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"`.
-
-## Structure
-
-```
-app/src/main/java/com/example/trackstuff/
-├── domain/Models.kt              domain models (MediaKind, WatchStatus, MediaDetails, Credits…)
-├── data/local/                   Room: library (AppDatabase), omdb.org (OmdbOrgDatabase), IMDb (ImdbDatabase)
-├── data/remote/{tmdb,tvdb,omdb,trakt,simkl}/   Retrofit clients + Moshi models
-├── data/remote/Network.kt        shared OkHttp client with disk cache (JSON + images), offline mode
-├── data/omdborg/                 omdb.org CSV dumps import (MySQL-style CSV reader) and local queries
-├── data/imdb/                    IMDb datasets import (Standard / Full), Top 250, Popular now
-├── data/repository/MetadataRepository.kt       search / discover / detail cascade across all sources
-├── data/repository/LibraryRepository.kt        local library
-├── data/sync/{Trakt,Simkl}SyncService.kt       auth + sync
-├── data/settings/SettingsRepository.kt         DataStore (keys, tokens, language, region, cache size)
-└── ui/{library,discover,search,detail,settings,navigation,components}/   Compose + Navigation 3
-```
-
-## Status mapping with sync services
-
-| Local          | Trakt                          | Simkl        |
-|----------------|--------------------------------|--------------|
-| Plan to watch  | watchlist                      | plantowatch  |
-| Watching       | history of watched episodes    | watching     |
-| Completed      | history (movie / whole show)   | completed    |
-| On hold        | removed from watchlist         | hold         |
-| Dropped        | removed from watchlist         | dropped      |
-
-Removals: a title deleted here is removed from both services; a title removed on one service is
-removed here and from the other service.
-
-Conflicts: a title changed locally since its last sync is pushed and not overwritten by the remote
-version; otherwise the remote version wins.
 
 ## Credits & licenses
 
