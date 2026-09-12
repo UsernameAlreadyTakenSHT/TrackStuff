@@ -39,16 +39,16 @@ On Windows without a JDK on the PATH: `JAVA_HOME="C:/Program Files/Android/Andro
 
 ### Data services
 
-| Service | Used for | Terms / attribution |
-|---|---|---|
-| [TMDB](https://www.themoviedb.org/) | Posters, metadata, charts | This product uses the TMDB API but is not endorsed or certified by TMDB. |
-| [TheTVDB](https://thetvdb.com/) | Posters, metadata, charts | Metadata provided by TheTVDB. Please consider adding missing information or subscribing. |
-| [OMDb API](https://www.omdbapi.com/) | Ratings, fallback posters | The Open Movie Database — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). |
-| [IMDb datasets](https://developer.imdb.com/non-commercial-datasets/) | Offline ratings, Top 250, credits | Information courtesy of [IMDb](https://www.imdb.com). Used with permission. Non-commercial use only. |
-| [omdb.org](https://www.omdb.org/) | Offline posters, synopses, search | Open Media Database — community data under free licenses; images under their own licenses. |
-| [Rotten Tomatoes](https://www.rottentomatoes.com/) · [Metacritic](https://www.metacritic.com/) | Scores | Values via OMDb API; the chips open the official sites. |
-| [Trakt](https://trakt.tv/) | Sync | Trakt API terms. |
-| [Simkl](https://simkl.com/) | Sync | Simkl API terms. |
+| | Service | Used for | Terms / attribution |
+|:-:|---|---|---|
+| <img src="docs/logos/tmdb.svg" height="22" alt=""> | [TMDB](https://www.themoviedb.org/) | Posters, metadata, charts | This product uses the TMDB API but is not endorsed or certified by TMDB. |
+| <img src="docs/logos/tvdb.png" height="28" alt=""> | [TheTVDB](https://thetvdb.com/) | Posters, metadata, charts | Metadata provided by TheTVDB. Please consider adding missing information or subscribing. |
+| <img src="docs/logos/omdb-api.png" height="20" alt=""> | [OMDb API](https://www.omdbapi.com/) | Ratings, fallback posters | The Open Movie Database — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). |
+| <img src="docs/logos/imdb.svg" height="22" alt=""> | [IMDb datasets](https://developer.imdb.com/non-commercial-datasets/) | Offline ratings, Top 250, credits | Information courtesy of [IMDb](https://www.imdb.com). Used with permission. Non-commercial use only. |
+| <img src="docs/logos/omdb-org.png" height="28" alt=""> | [omdb.org](https://www.omdb.org/) | Offline posters, synopses, search | Open Media Database — community data under free licenses; images under their own licenses. |
+| <img src="docs/logos/rottentomatoes.svg" height="26" alt=""> <img src="docs/logos/metacritic.svg" height="26" alt=""> | [Rotten Tomatoes](https://www.rottentomatoes.com/) · [Metacritic](https://www.metacritic.com/) | Scores | Values via OMDb API; the chips open the official sites. |
+| <img src="docs/logos/trakt.png" height="28" alt=""> | [Trakt](https://trakt.tv/) | Sync | Trakt API terms. |
+| <img src="docs/logos/simkl.png" height="28" alt=""> | [Simkl](https://simkl.com/) | Sync | Simkl API terms. |
 
 ### Open-source libraries
 
