@@ -223,8 +223,8 @@ class ImdbRepository(
             if (id !in kept) return@readTsv
             val category = c.getOrNull(3) ?: return@readTsv
             val ordering = c.getOrNull(1)?.toIntOrNull() ?: 99
-            // Series creators: category = writer, job = creator (title.crew only lists episode directors).
-            if (category == "writer" && c.getOrNull(4) == "creator") {
+            // Series creators: category = writer, job = "creator" or "created by" (title.crew only lists episode directors).
+            if (category == "writer" && c.getOrNull(4) in CREATOR_JOBS) {
                 needed += c[2]; batch += ImdbCrewEntity(tconst = id, nconst = c[2], role = "creator", character = null, ordering = ordering)
                 return@readTsv
             }
@@ -400,7 +400,9 @@ class ImdbRepository(
          * Bumped whenever the importer extracts new data from the same files (e.g. series creators): data
          * imported by an older version may then be refreshed before the monthly limit.
          */
-        const val FORMAT_VERSION = 2
+        const val FORMAT_VERSION = 3
+        /** Job values of title.principals that mark a series creator. */
+        private val CREATOR_JOBS = setOf("creator", "created by")
         /** Approximate compressed sizes of the datasets (MB), for the overall progress estimate. */
         private val APPROX_SIZE_MB = mapOf("title.ratings" to 9.0, "title.basics" to 230.0, "title.episode" to 55.0, "title.crew" to 85.0, "title.principals" to 790.0, "name.basics" to 310.0, "title.akas" to 520.0)
         /** A failed poster lookup is retried after this delay. */
