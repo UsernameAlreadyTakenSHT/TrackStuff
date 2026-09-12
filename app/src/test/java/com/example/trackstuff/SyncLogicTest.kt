@@ -92,3 +92,29 @@ class PendingRemovalTest {
         assertEquals(emptyList<PendingRemoval>(), PendingRemoval.decode("not json"))
     }
 }
+
+class EpisodesAfterTest {
+    @Test
+    fun `episodes after the position with known seasons`() {
+        assertEquals(listOf(2 to listOf(3, 4), 3 to listOf(1, 2)), com.example.trackstuff.data.sync.episodesAfter(2, 2, listOf(3, 4, 2)))
+    }
+
+    @Test
+    fun `nothing after the last episode`() {
+        assertEquals(emptyList<Pair<Int, List<Int>>>(), com.example.trackstuff.data.sync.episodesAfter(3, 2, listOf(3, 4, 2)))
+    }
+
+    @Test
+    fun `whole show when nothing is watched`() {
+        val all = com.example.trackstuff.data.sync.episodesAfter(0, 0, listOf(2, 1))
+        assertEquals(listOf(1 to listOf(1, 2), 2 to listOf(1)), all)
+    }
+
+    @Test
+    fun `unknown season lengths get a generous range`() {
+        val after = com.example.trackstuff.data.sync.episodesAfter(1, 48)
+        assertEquals(1, after.first().first)
+        assertEquals(listOf(49, 50), after.first().second)
+        assertEquals(11, after.size)
+    }
+}

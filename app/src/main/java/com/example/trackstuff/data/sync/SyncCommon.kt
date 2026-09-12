@@ -62,3 +62,23 @@ internal fun parseSxxExx(text: String?): Pair<Int, Int>? {
     val m = Regex("[sS](\\d+)[eE](\\d+)").find(text) ?: return null
     return m.groupValues[1].toInt() to m.groupValues[2].toInt()
 }
+
+/**
+ * Seasons/episodes *after* the current position, to un-mark on the services when the user moves back.
+ * Seasons whose length is unknown get [UNKNOWN_SEASON_EPISODES] episodes and [UNKNOWN_SEASON_COUNT] extra
+ * seasons are added: services ignore episodes that do not exist.
+ */
+internal fun episodesAfter(season: Int, episode: Int, seasonEpisodes: List<Int> = emptyList()): List<Pair<Int, List<Int>>> {
+    val out = mutableListOf<Pair<Int, List<Int>>>()
+    val firstSeason = if (season <= 0) 1 else season
+    val lastSeason = if (seasonEpisodes.isNotEmpty()) seasonEpisodes.size else firstSeason + UNKNOWN_SEASON_COUNT
+    for (s in firstSeason..lastSeason) {
+        val count = seasonEpisodes.getOrNull(s - 1) ?: UNKNOWN_SEASON_EPISODES
+        val from = if (s == season) episode + 1 else 1
+        if (from <= count) out += s to (from..count).toList()
+    }
+    return out
+}
+
+private const val UNKNOWN_SEASON_EPISODES = 50
+private const val UNKNOWN_SEASON_COUNT = 10

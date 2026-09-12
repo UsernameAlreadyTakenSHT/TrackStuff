@@ -227,7 +227,21 @@ class SimklSyncService(
         val anime = toPush.filter { it.details.isSeries && it.details.kind == MediaKind.ANIME }
         val shows = toPush.filter { it.details.isSeries && it.details.kind != MediaKind.ANIME }
 
-        // Statuts (listes)
+        // Titles moved back to "plan to watch" lose their watched episodes / plays first (history/remove also
+        // drops the title from every list, so it is re-added by add-to-list right after).
+        val backToPlanned = toPush.filter { it.tracking.status == WatchStatus.PLANNED }
+        if (backToPlanned.isNotEmpty()) {
+            post {
+                api.removeFromHistory(
+                    SimklSyncBody(
+                        movies = backToPlanned.filter { !it.details.isSeries }.map { SimklSyncItem(ids(it)) },
+                        shows = backToPlanned.filter { it.details.isSeries }.map { SimklSyncItem(ids(it)) },
+                    )
+                )
+            }
+        }
+
+        // Statuses (lists)
         val body = SimklSyncBody(
             movies = movies.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, true)) },
             shows = shows.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
@@ -247,6 +261,12 @@ class SimklSyncService(
                 seasons = episodesUpTo(i.tracking.currentSeason, i.tracking.currentEpisode, i.details.seasonEpisodes).map { (num, eps) -> SimklSeasonRef(num, eps.map { SimklEpisodeRef(it) }) },
             )
             post { api.addHistory(SimklSyncBody(shows = inProgress.map { hist(it) })) }
+            // Un-mark everything after the current position, in case the user moved back.
+            fun after(i: LibraryItem) = SimklSyncItem(
+                ids(i),
+                seasons = episodesAfter(i.tracking.currentSeason, i.tracking.currentEpisode, i.details.seasonEpisodes).map { (num, eps) -> SimklSeasonRef(num, eps.map { SimklEpisodeRef(it) }) },
+            )
+            post { api.removeFromHistory(SimklSyncBody(shows = inProgress.map { after(it) })) }
         }
 
         toPush.forEach { library.markSynced(it.localId, trakt = false, simkl = true) }

@@ -246,11 +246,25 @@ class TraktSyncService(
         val movies = toPush.filter { !it.details.isSeries }
         val shows = toPush.filter { it.details.isSeries }
 
-        // Watchlist
+        // Watchlist. A title moved back to "plan to watch" also loses its plays (it may have been completed before).
         val wlMovies = movies.filter { it.tracking.status == WatchStatus.PLANNED }
         val wlShows = shows.filter { it.tracking.status == WatchStatus.PLANNED }
         if (wlMovies.isNotEmpty() || wlShows.isNotEmpty()) {
+            api.removeFromHistory(TraktSyncBody(wlMovies.map { TraktSyncMovie(ids(it)) }, wlShows.map { TraktSyncShow(ids(it)) }))
             api.addToWatchlist(TraktSyncBody(wlMovies.map { TraktSyncMovie(ids(it)) }, wlShows.map { TraktSyncShow(ids(it)) }))
+        }
+
+        // Shows in progress: un-mark everything after the current position, in case the user moved back.
+        val inProgress = shows.filter { it.tracking.status == WatchStatus.WATCHING && it.tracking.currentSeason > 0 }
+        if (inProgress.isNotEmpty()) {
+            api.removeFromHistory(
+                TraktSyncBody(
+                    emptyList(),
+                    inProgress.map { s ->
+                        TraktSyncShow(ids(s), seasons = episodesAfter(s.tracking.currentSeason, s.tracking.currentEpisode, s.details.seasonEpisodes).map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
+                    },
+                )
+            )
         }
 
         // History
