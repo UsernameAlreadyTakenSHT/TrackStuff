@@ -20,3 +20,4 @@ local.properties
 # Release signing keystore: never committed; back it up somewhere safe.
 keystore/
 *.jks
+*.apk
