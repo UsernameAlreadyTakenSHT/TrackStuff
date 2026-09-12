@@ -288,7 +288,7 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel) {
         WatchStatus.entries.filter { d.isSeries || it != WatchStatus.WATCHING }.forEach { s ->
             FilterChip(
                 selected = t.status == s,
-                enabled = s != WatchStatus.WATCHING,
+                // Watching is informational: tapping it does nothing (setStatus keeps the derived value).
                 onClick = { vm.setStatus(s) },
                 label = { Text(stringResource(s.labelRes)) },
                 leadingIcon = { Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(statusColor(s))) },

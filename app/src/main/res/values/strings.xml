@@ -23,7 +23,7 @@
     <string name="library_continue">Continue watching</string>
     <string name="library_start">Start watching</string>
     <string name="library_history">History</string>
-    <string name="library_empty_continue">Nothing in progress. Mark a title as “Watching” from its page.</string>
+    <string name="library_empty_continue">Nothing in progress. Mark an episode as watched from a series page.</string>
     <string name="library_empty_start_none">Your library is empty: add titles from Discover or Search.</string>
     <string name="library_empty_start">Nothing planned.</string>
     <string name="library_empty_history">Nothing completed yet.</string>
