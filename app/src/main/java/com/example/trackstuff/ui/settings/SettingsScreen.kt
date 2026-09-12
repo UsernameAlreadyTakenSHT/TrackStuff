@@ -250,15 +250,16 @@ private fun LocalDatasetBlock(hint: String, titleCount: Int, lastImportAt: Long?
         )
         when (state) {
             is OmdbImportState.Running -> {
-                Text(state.step, style = MaterialTheme.typography.bodySmall)
-                if (state.progress != null) LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
+                // Current step with its own percentage and ETA; the bar and the line below are the whole import.
+                val stepDetail = listOfNotNull(state.progress?.let { "${(it * 100).toInt()} %" }, state.etaSeconds?.let { formatEta(it) }).joinToString(" · ")
+                Text(if (stepDetail.isEmpty()) state.step else "${state.step} — $stepDetail", style = MaterialTheme.typography.bodySmall)
+                if (state.overall != null) LinearProgressIndicator(progress = { state.overall }, modifier = Modifier.fillMaxWidth())
                 else LinearProgressIndicator(Modifier.fillMaxWidth())
-                // Percentage and ETA of the current step, in small print.
-                val detail = listOfNotNull(
-                    state.progress?.let { "${(it * 100).toInt()} %" },
-                    state.etaSeconds?.let { stringResource(R.string.import_eta, formatEta(it)) },
+                val overall = listOfNotNull(
+                    state.overall?.let { "${(it * 100).toInt()} %" },
+                    state.overallEtaSeconds?.let { stringResource(R.string.import_eta, formatEta(it)) },
                 ).joinToString(" · ")
-                if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (overall.isNotEmpty()) Text(stringResource(R.string.import_overall, overall), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             }
             else -> {

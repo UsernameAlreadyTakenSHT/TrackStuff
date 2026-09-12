@@ -37,8 +37,8 @@ private const val TAG = "OmdbOrg"
 /** Progress of the dump import. */
 sealed class OmdbImportState {
     data object Idle : OmdbImportState()
-    /** [etaSeconds] is estimated from the elapsed time of the current step; null while unknown. */
-    data class Running(val step: String, val progress: Float?, val etaSeconds: Long? = null) : OmdbImportState()
+    /** Current step (label, progress, ETA) and the whole import (progress, ETA); ETAs are null while unknown. */
+    data class Running(val step: String, val progress: Float?, val etaSeconds: Long? = null, val overall: Float? = null, val overallEtaSeconds: Long? = null) : OmdbImportState()
     data class Done(val titles: Int, val aliases: Int) : OmdbImportState()
     data class Error(val message: String) : OmdbImportState()
 }
@@ -110,12 +110,23 @@ class OmdbOrgRepository(
             (if (lang != "en") listOf("movie_abstracts_$lang") else emptyList()) + listOf("all_movie_aliases_iso", "all_people", "all_casts")
         val optional = setOf("movie_abstracts_$lang")
 
+        // Plan for the overall progress: downloads by size, then the parsing steps (size × parse cost).
+        fun mb(vararg names: String) = names.sumOf { APPROX_SIZE_MB[it] ?: 1.0 } * 1e6
+        val parse = ImportProgress.PARSE_COST
+        prog.plan(
+            files.map { mb(it) } + listOf(
+                mb("all_movies", "all_series") * parse, mb("movie_links") * parse, mb("image_ids") * parse, mb("movie_categories") * parse,
+                mb("movie_abstracts_en", "movie_abstracts_$lang") * parse, mb("movie_countries", "all_votes", "movie_details") * parse,
+                mb("all_movies") * parse * 2, mb("all_movie_aliases_iso") * parse, mb("all_people") * parse, mb("all_casts") * parse,
+            ),
+        )
+
         // 1. Download
         val downloaded = mutableMapOf<String, File>()
         files.forEachIndexed { i, name ->
             val f = File(dir, "$name.csv.bz2")
             try {
-                prog.step("Downloading $name (${i + 1}/${files.size})", 0f)
+                prog.step("Downloading $name (${i + 1}/${files.size})")
                 Downloader.download("$DATA_BASE$name.csv.bz2", f) { p -> prog.update(p) }
                 downloaded[name] = f
             } catch (e: Exception) {
@@ -124,18 +135,18 @@ class OmdbOrgRepository(
         }
 
         // 2. Lookup tables read into memory
-        prog.step("Reading titles", 0f)
+        prog.step("Reading titles")
         val titles = HashMap<Int, TitleBuilder>(100_000)
         read(downloaded.getValue("all_movies")) { r -> r.id()?.let { titles[it] = TitleBuilder(r[1] ?: return@read, false, yearOf(r.getOrNull(3))) } }
         read(downloaded.getValue("all_series")) { r -> r.id()?.let { titles[it] = TitleBuilder(r[1] ?: return@read, true, yearOf(r.getOrNull(3))) } }
 
-        prog.step("Reading IMDb ids", 0f)
+        prog.step("Reading IMDb ids")
         val imdb = HashMap<Int, String>(90_000)
         read(downloaded.getValue("movie_links")) { r ->
             if (r[0] == "imdbmovie") r.getOrNull(2)?.toIntOrNull()?.let { id -> r[1]?.let { imdb[id] = it } }
         }
 
-        prog.step("Reading posters", 0f)
+        prog.step("Reading posters")
         val images = HashMap<Int, Pair<Int, Int?>>(70_000)
         read(downloaded.getValue("image_ids")) { r ->
             if (r.getOrNull(2) == "Movie") {
@@ -145,14 +156,14 @@ class OmdbOrgRepository(
             }
         }
 
-        prog.step("Reading genres", 0f)
+        prog.step("Reading genres")
         val genres = HashMap<Int, MutableList<Int>>()
         read(downloaded.getValue("movie_categories")) { r ->
             val cat = r.getOrNull(1)?.toIntOrNull() ?: return@read
             if (cat in KEPT_GENRES) r.id()?.let { genres.getOrPut(it) { mutableListOf() }.add(cat) }
         }
 
-        prog.step("Reading synopses", 0f)
+        prog.step("Reading synopses")
         val abstractsEn = HashMap<Int, String>(8_000)
         read(downloaded.getValue("movie_abstracts_en")) { r -> r.id()?.let { id -> r.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { abstractsEn[id] = it } } }
         val abstractsLocal = HashMap<Int, String>()
@@ -160,7 +171,7 @@ class OmdbOrgRepository(
             read(f) { r -> r.id()?.let { id -> r.getOrNull(1)?.takeIf { it.isNotBlank() }?.let { abstractsLocal[id] = it } } }
         }
 
-        prog.step("Reading countries and runtimes", 0f)
+        prog.step("Reading countries and runtimes")
         val countries = HashMap<Int, MutableList<String>>()
         read(downloaded.getValue("movie_countries")) { r -> r.id()?.let { id -> r.getOrNull(1)?.let { countries.getOrPut(id) { mutableListOf() }.add(it) } } }
         val votes = HashMap<Int, Pair<Float, Int>>(45_000)
@@ -169,7 +180,7 @@ class OmdbOrgRepository(
         read(downloaded.getValue("movie_details")) { r -> r.id()?.let { id -> r.getOrNull(1)?.toIntOrNull()?.takeIf { it > 0 }?.let { runtimes[id] = it } } }
 
         // 3. Title insertion
-        prog.step("Saving titles", 0f)
+        prog.step("Saving titles")
         dao.clearAliases(); dao.clearCast(); dao.clearTitles()
         val entities = ArrayList<OmdbTitleEntity>(1000)
         var inserted = 0
@@ -199,7 +210,7 @@ class OmdbOrgRepository(
         if (entities.isNotEmpty()) { dao.insertTitles(entities); inserted += entities.size; entities.clear() }
 
         // 4. Aliases (translated titles) — inserted while reading
-        prog.step("Saving translated titles", 0f)
+        prog.step("Saving translated titles")
         val aliases = ArrayList<OmdbAliasEntity>(2000)
         var aliasCount = 0
         read(downloaded.getValue("all_movie_aliases_iso")) { r ->
@@ -212,10 +223,10 @@ class OmdbOrgRepository(
         if (aliases.isNotEmpty()) { dao.insertAliases(aliases); aliasCount += aliases.size }
 
         // 5. Credits: all_people (names) then all_casts (person, job, role, order), useful jobs only
-        prog.step("Reading people", 0f)
+        prog.step("Reading people")
         val people = HashMap<Int, String>(320_000)
         read(downloaded.getValue("all_people")) { r -> r.id()?.let { id -> r.getOrNull(1)?.let { people[id] = it } } }
-        prog.step("Saving cast", 0f)
+        prog.step("Saving cast")
         val cast = ArrayList<OmdbCastEntity>(2000)
         var castCount = 0
         read(downloaded.getValue("all_casts")) { r ->
@@ -342,6 +353,11 @@ class OmdbOrgRepository(
 
     companion object {
         const val DATA_BASE = "https://www.omdb.org/data/"
+        /** Approximate compressed sizes of the dumps (MB), for the overall progress estimate. */
+        private val APPROX_SIZE_MB = mapOf(
+            "all_movies" to 1.5, "all_series" to 0.1, "movie_links" to 0.6, "image_ids" to 0.5, "movie_categories" to 0.4, "movie_countries" to 0.3,
+            "movie_details" to 0.5, "all_votes" to 0.2, "movie_abstracts_en" to 6.0, "all_movie_aliases_iso" to 2.0, "all_people" to 4.0, "all_casts" to 7.0,
+        )
         /** The dumps are rarely regenerated: they are not downloaded more than once a month. */
         const val MIN_INTERVAL_MS = 30L * 24 * 3600 * 1000
         /** Only the genres useful for classification are kept. */

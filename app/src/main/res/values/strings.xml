@@ -131,6 +131,7 @@
     <string name="settings_omdborg_update">Update</string>
     <string name="settings_omdborg_limit">Download limited to once a month · next possible on %s</string>
     <string name="import_eta">about %s left</string>
+    <string name="import_overall">Overall: %s</string>
     <string name="settings_omdborg_done">Import complete: %1$d titles, %2$d translated titles.</string>
     <string name="settings_imdb_standard">Standard (~280 MB)</string>
     <string name="settings_imdb_full">Full (~1.9 GB)</string>

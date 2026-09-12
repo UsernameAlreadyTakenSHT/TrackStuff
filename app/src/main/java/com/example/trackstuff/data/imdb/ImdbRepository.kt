@@ -111,13 +111,17 @@ class ImdbRepository(
         val names = if (full) listOf("title.ratings", "title.basics", "title.episode", "title.crew", "title.principals", "name.basics", "title.akas")
         else listOf("title.ratings", "title.basics", "title.episode")
         val files = names.associateWith { File(dir, "$it.tsv.gz") }
+        // Plan for the overall progress: one download step per file, then the parsing steps weighted by size.
+        val sizes = names.map { APPROX_SIZE_MB.getValue(it) * 1e6 }
+        val parseSteps = if (full) listOf("title.ratings", "title.basics", "title.episode", "title.crew", "title.principals", "name.basics", "title.akas") else listOf("title.ratings", "title.basics", "title.episode")
+        prog.plan(sizes + parseSteps.map { APPROX_SIZE_MB.getValue(it) * 1e6 * ImportProgress.PARSE_COST })
         names.forEachIndexed { i, n ->
-            prog.step("Downloading $n (${i + 1}/${names.size})", 0f)
+            prog.step("Downloading $n (${i + 1}/${names.size})")
             Downloader.download("$BASE/$n.tsv.gz", files.getValue(n)) { p -> prog.update(p) }
         }
 
         // 1. Ratings: only those with enough votes are kept (≈ 100,000 out of 1.7 M).
-        prog.step("Reading ratings", 0f)
+        prog.step("Reading ratings")
         val ratings = HashMap<String, Pair<Float, Int>>(150_000)
         readTsv(files.getValue("title.ratings")) { cols ->
             val votes = cols.getOrNull(2)?.toIntOrNull() ?: return@readTsv
@@ -128,7 +132,7 @@ class ImdbRepository(
         val previous = HashMap<String, Int>(70_000).apply { dao.allVotes().forEach { put(it.imdbId, it.votes) } }
 
         // 2. Titles: a stream of 11 M lines; only rated movies / series are kept.
-        prog.step("Reading titles (this takes a few minutes)", 0f)
+        prog.step("Reading titles")
         dao.clear()
         val kept = HashSet<String>(100_000)
         val batch = ArrayList<ImdbTitleEntity>(2000)
@@ -178,7 +182,7 @@ class ImdbRepository(
 
     /** title.episode: tconst, parentTconst, seasonNumber, episodeNumber → episodes per season of the kept series. */
     private suspend fun importEpisodes(file: File, kept: Set<String>) {
-        prog.step("Reading episodes", 0f)
+        prog.step("Reading episodes")
         val counts = HashMap<String, HashMap<Int, Int>>()
         readTsv(file) { c ->
             val parent = c.getOrNull(1) ?: return@readTsv
@@ -198,7 +202,7 @@ class ImdbRepository(
         val batch = ArrayList<ImdbCrewEntity>(2000)
         suspend fun flush() { if (batch.isNotEmpty()) { dao.insertCrew(batch); batch.clear() } }
 
-        prog.step("Reading directors and writers", 0f)
+        prog.step("Reading directors and writers")
         readTsv(crewFile) { c ->
             val id = c[0]
             if (id !in kept) return@readTsv
@@ -212,7 +216,7 @@ class ImdbRepository(
         }
         flush()
 
-        prog.step("Reading cast (large file, several minutes)", 0f)
+        prog.step("Reading cast")
         var seen = 0
         readTsv(principalsFile) { c ->
             val id = c[0]
@@ -235,7 +239,7 @@ class ImdbRepository(
         }
         flush()
 
-        prog.step("Reading names", 0f)
+        prog.step("Reading names")
         val persons = ArrayList<ImdbPersonEntity>(2000)
         readTsv(namesFile) { c ->
             val n = c[0]
@@ -248,7 +252,7 @@ class ImdbRepository(
 
     /** title.akas: translated titles of the kept titles (offline search in the phone's language). */
     private suspend fun importAliases(file: File, kept: Set<String>) {
-        prog.step("Reading translated titles", 0f)
+        prog.step("Reading translated titles")
         dao.clearAliases()
         val batch = ArrayList<ImdbAliasEntity>(2000)
         var n = 0
@@ -397,6 +401,8 @@ class ImdbRepository(
          * imported by an older version may then be refreshed before the monthly limit.
          */
         const val FORMAT_VERSION = 2
+        /** Approximate compressed sizes of the datasets (MB), for the overall progress estimate. */
+        private val APPROX_SIZE_MB = mapOf("title.ratings" to 9.0, "title.basics" to 230.0, "title.episode" to 55.0, "title.crew" to 85.0, "title.principals" to 790.0, "name.basics" to 310.0, "title.akas" to 520.0)
         /** A failed poster lookup is retried after this delay. */
         const val POSTER_RETRY_MS = 7 * 24 * 60 * 60 * 1000L
         /** Minimum votes to keep a title (≈ 65,000 movies and series). */
