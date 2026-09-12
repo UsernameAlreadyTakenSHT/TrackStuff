@@ -38,6 +38,7 @@
     <!-- Discover -->
     <string name="discover_title">Discover</string>
     <string name="discover_refresh">Refresh</string>
+    <string name="refresh_wait">Already refreshed recently — try again in %s min.</string>
     <string name="discover_movies">Movies</string>
     <string name="discover_series">Series</string>
     <string name="discover_nothing">Nothing to show yet.</string>

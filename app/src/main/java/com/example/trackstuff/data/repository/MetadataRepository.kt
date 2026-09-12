@@ -200,7 +200,7 @@ class MetadataRepository(
     suspend fun discover(force: Boolean = false): DiscoverOutcome {
         val memo = discoverMemo
         if (!force && memo != null && System.currentTimeMillis() - memo.first < DISCOVER_MEMO_MS && memo.second.problems.isEmpty()) return memo.second
-        if (force) com.example.trackstuff.data.remote.Network.evict { url -> LIST_URL_MARKERS.any { it in url } }
+        if (force && com.example.trackstuff.data.remote.RefreshLimiter.tryAcquire("discover")) com.example.trackstuff.data.remote.Network.evict { url -> LIST_URL_MARKERS.any { it in url } }
         return discoverNow().also { discoverMemo = System.currentTimeMillis() to it }
     }
 

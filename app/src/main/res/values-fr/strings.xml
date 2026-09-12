@@ -31,6 +31,7 @@
 
     <string name="discover_title">Découvrir</string>
     <string name="discover_refresh">Actualiser</string>
+    <string name="refresh_wait">Déjà actualisé récemment — réessayez dans %s min.</string>
     <string name="discover_movies">Films</string>
     <string name="discover_series">Séries</string>
     <string name="discover_nothing">Rien à afficher pour le moment.</string>

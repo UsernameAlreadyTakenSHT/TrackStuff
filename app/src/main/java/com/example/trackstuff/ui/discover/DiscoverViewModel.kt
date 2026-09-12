@@ -27,6 +27,8 @@ data class DiscoverUiState(
     val media: MediaFilter = MediaFilter.MOVIES,
     /** Posters resolved on demand for titles without one (IMDb Top 250), by IMDb id. */
     val posters: Map<String, String?> = emptyMap(),
+    /** Minutes to wait before the next forced refresh; set when the button is tapped too soon. */
+    val refreshWaitMinutes: Long? = null,
 )
 
 /** Discover screen: trending, popular and new titles, per source (TMDB, TVDB, IMDb, omdb.org). */
@@ -54,8 +56,14 @@ class DiscoverViewModel(private val metadata: MetadataRepository, private val li
 
     fun setMedia(media: MediaFilter) = _state.update { it.copy(media = media) }
 
-    /** Refresh button: bypasses the memory and HTTP caches for the chart lists. */
-    fun refresh() = load(force = true)
+    /** Refresh button: bypasses the memory and HTTP caches for the chart lists, at most once an hour. */
+    fun refresh() {
+        val wait = com.example.trackstuff.data.remote.RefreshLimiter.waitMinutes("discover")
+        if (wait != null) { _state.update { it.copy(refreshWaitMinutes = wait) }; return }
+        load(force = true)
+    }
+
+    fun consumeMessage() = _state.update { it.copy(refreshWaitMinutes = null) }
 
     private fun load(force: Boolean) {
         viewModelScope.launch {

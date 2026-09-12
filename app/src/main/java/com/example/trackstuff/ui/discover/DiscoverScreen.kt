@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -47,8 +48,14 @@ private val SOURCES = listOf(DataSource.TMDB, DataSource.TVDB, DataSource.IMDB, 
 @Composable
 fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote: (MediaSummary) -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val waitText = state.refreshWaitMinutes?.let { stringResource(R.string.refresh_wait, it.toString()) }
+    androidx.compose.runtime.LaunchedEffect(waitText) {
+        if (waitText != null) { snackbar.showSnackbar(waitText); vm.consumeMessage() }
+    }
 
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.discover_title)) },

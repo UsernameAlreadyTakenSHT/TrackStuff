@@ -136,6 +136,10 @@ class DetailViewModel(
 
     fun refresh() {
         val id = localId ?: return
+        com.example.trackstuff.data.remote.RefreshLimiter.waitMinutes("title:$id")?.let { wait ->
+            _state.update { it.copy(message = DetailMessage(R.string.refresh_wait, arg = wait.toString())) }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(refreshing = true) }
             try {
