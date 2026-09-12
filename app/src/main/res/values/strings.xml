@@ -76,7 +76,7 @@
     <string name="detail_updated">Page updated</string>
     <string name="detail_update_failed">Update failed: %s</string>
     <string name="detail_ratings">Ratings</string>
-    <string name="detail_ratings_hint">Set an OMDb API key in Settings to show ratings. The chips open the sites.</string>
+    <string name="detail_ratings_hint">No ratings available for this title. Ratings come from the OMDb API (key in Settings); the chips open the sites.</string>
     <string name="detail_credits">Credits</string>
     <string name="credit_director">Director</string>
     <string name="credit_creator">Created by</string>
@@ -93,9 +93,6 @@
     <string name="source_ratings">ratings: OMDb API</string>
     <string name="detail_tracking">My tracking</string>
     <string name="detail_progress">Progress</string>
-    <string name="detail_my_rating">My rating</string>
-    <string name="detail_category">Category</string>
-    <string name="detail_notes">Personal notes</string>
     <string name="detail_synced">Synced: %s</string>
 
     <!-- Settings -->

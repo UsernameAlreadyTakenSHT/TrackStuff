@@ -1,13 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android auto backup (API < 31): only the user's library and settings. The large imported datasets
+    (IMDb, omdb.org) and the HTTP cache are excluded — they can be downloaded again and would exceed
+    the 25 MB backup quota, which would make the whole backup fail.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <include domain="database" path="trackstuff.db"/>
+    <include domain="file" path="datastore/"/>
+    <exclude domain="database" path="imdb.db"/>
+    <exclude domain="database" path="omdb_org.db"/>
 </full-backup-content>
