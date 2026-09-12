@@ -16,6 +16,10 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 fun secret(name: String): String = "\"" + (localProps.getProperty(name) ?: System.getenv(name) ?: "") + "\""
+// Keys are embedded in debug builds only. A release APK ships without any key (users enter theirs in
+// Settings), unless RELEASE_EMBED_KEYS=true is set in local.properties for a personal build.
+val embedKeysInRelease = localProps.getProperty("RELEASE_EMBED_KEYS")?.toBoolean() ?: false
+val secretNames = listOf("TMDB_API_KEY", "TVDB_API_KEY", "OMDB_API_KEY", "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "SIMKL_CLIENT_ID", "SIMKL_CLIENT_SECRET")
 
 android {
     namespace = "com.example.trackstuff"
@@ -32,13 +36,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "TMDB_API_KEY", secret("TMDB_API_KEY"))
-        buildConfigField("String", "TVDB_API_KEY", secret("TVDB_API_KEY"))
-        buildConfigField("String", "OMDB_API_KEY", secret("OMDB_API_KEY"))
-        buildConfigField("String", "TRAKT_CLIENT_ID", secret("TRAKT_CLIENT_ID"))
-        buildConfigField("String", "TRAKT_CLIENT_SECRET", secret("TRAKT_CLIENT_SECRET"))
-        buildConfigField("String", "SIMKL_CLIENT_ID", secret("SIMKL_CLIENT_ID"))
-        buildConfigField("String", "SIMKL_CLIENT_SECRET", secret("SIMKL_CLIENT_SECRET"))
     }
 
     // Release signing: only when a keystore is configured in local.properties; otherwise the release build
@@ -56,10 +53,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            secretNames.forEach { buildConfigField("String", it, secret(it)) }
+        }
         release {
             optimization {
                 enable = false
             }
+            secretNames.forEach { buildConfigField("String", it, if (embedKeysInRelease) secret(it) else "\"\"") }
             if (storeFile != null && storeFile.exists()) signingConfig = signingConfigs.getByName("release")
         }
     }

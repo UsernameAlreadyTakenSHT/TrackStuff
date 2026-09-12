@@ -28,7 +28,8 @@ SIMKL_CLIENT_SECRET=…
 
 ```
 ./gradlew :app:assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:assembleRelease    # signed if RELEASE_STORE_FILE / passwords are set in local.properties
+./gradlew :app:assembleRelease    # signed if RELEASE_STORE_FILE / passwords are set; ships without keys
+                                  # (set RELEASE_EMBED_KEYS=true for a personal build with your keys)
 ./gradlew :app:testDebugUnitTest
 ```
 
