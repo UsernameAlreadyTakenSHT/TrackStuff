@@ -39,8 +39,19 @@ interface TmdbApi {
     @GET("tv/popular")
     suspend fun popularTv(@Query("language") language: String, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
 
-    @GET("movie/now_playing")
-    suspend fun nowPlaying(@Query("language") language: String, @Query("region") region: String?, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
+    /** Movies with a theatrical release coming up in [region] (soonest first is not guaranteed: TMDB sorts by popularity). */
+    @GET("movie/upcoming")
+    suspend fun upcoming(@Query("language") language: String, @Query("region") region: String?, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
+
+    /**
+     * Best average vote among widely voted titles. TMDB's own `top_rated` lists use a low vote floor and are
+     * dominated by freshly hyped releases; a high [minVotes] gives the classics instead.
+     */
+    @GET("discover/movie")
+    suspend fun topRatedMovies(@Query("language") language: String, @Query("vote_count.gte") minVotes: Int, @Query("page") page: Int = 1, @Query("sort_by") sort: String = "vote_average.desc"): TmdbPage<TmdbSearchResult>
+
+    @GET("discover/tv")
+    suspend fun topRatedTv(@Query("language") language: String, @Query("vote_count.gte") minVotes: Int, @Query("page") page: Int = 1, @Query("sort_by") sort: String = "vote_average.desc"): TmdbPage<TmdbSearchResult>
 
     @GET("tv/on_the_air")
     suspend fun onTheAir(@Query("language") language: String, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>

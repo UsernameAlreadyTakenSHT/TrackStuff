@@ -232,8 +232,14 @@ class MetadataRepository(
         // The movie / TV lists do not return media_type: set it explicitly.
         tmdbRow(CAT_POPULAR, "Popular", SectionMedia.MOVIES) { api, p -> api.popularMovies(s.language, null, p).results.map { r -> r.copy(mediaType = "movie") } }
         tmdbRow(CAT_POPULAR, "Popular", SectionMedia.SERIES) { api, p -> api.popularTv(s.language, p).results.map { r -> r.copy(mediaType = "tv") } }
-        tmdbRow(CAT_NEW, "In theaters", SectionMedia.MOVIES) { api, p -> api.nowPlaying(s.language, null, p).results.map { r -> r.copy(mediaType = "movie") } }
+        // "In theaters" is sorted by popularity too and overlapped "Popular" almost entirely: upcoming releases
+        // (in the user's region) cannot be in "Popular" yet, and "Top rated" barely moves.
+        // The upcoming list also carries re-releases (an old film back in theaters): only recent premieres are kept.
+        val recent = java.time.LocalDate.now().minusDays(UPCOMING_MAX_AGE_DAYS).toString()
+        tmdbRow(CAT_NEW, "Upcoming", SectionMedia.MOVIES) { api, p -> api.upcoming(s.language, s.region, p).results.filter { r -> r.releaseDate.isNullOrBlank() || r.releaseDate >= recent }.map { r -> r.copy(mediaType = "movie") } }
         tmdbRow(CAT_NEW, "On the air this week", SectionMedia.SERIES) { api, p -> api.onTheAir(s.language, p).results.map { r -> r.copy(mediaType = "tv") } }
+        tmdbRow(CAT_TOP, "Top rated", SectionMedia.MOVIES) { api, p -> api.topRatedMovies(s.language, TOP_RATED_MIN_VOTES_MOVIE, p).results.map { r -> r.copy(mediaType = "movie") } }
+        tmdbRow(CAT_TOP, "Top rated", SectionMedia.SERIES) { api, p -> api.topRatedTv(s.language, TOP_RATED_MIN_VOTES_TV, p).results.map { r -> r.copy(mediaType = "tv") } }
 
         // TVDB: /series/filter and /movies/filter require an origin country and language.
         try {
@@ -777,7 +783,12 @@ class MetadataRepository(
         /** Problems that only change when the user edits Settings (as opposed to network or server errors). */
         fun isConfigProblem(p: String) = "not set" in p || "not imported" in p
         /** URL fragments of the chart endpoints, evicted from the HTTP cache on an explicit refresh. */
-        private val LIST_URL_MARKERS = listOf("/trending/", "/popular", "/now_playing", "/on_the_air", "/filter")
+        /** Upcoming: primary release older than this is a re-release. */
+        const val UPCOMING_MAX_AGE_DAYS = 180L
+        /** Top rated: vote floors that leave the well-known classics. */
+        const val TOP_RATED_MIN_VOTES_MOVIE = 5000
+        const val TOP_RATED_MIN_VOTES_TV = 1500
+        private val LIST_URL_MARKERS = listOf("/trending/", "/popular", "/upcoming", "/discover/", "/on_the_air", "/filter")
 
         /** Below this count a row is not shown. */
         const val MIN_ROW = 10

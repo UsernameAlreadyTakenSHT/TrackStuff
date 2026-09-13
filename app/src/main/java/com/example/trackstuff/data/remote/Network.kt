@@ -141,7 +141,7 @@ object Network {
         val p = request.url.encodedPath
         return LIST_PATHS.any { it in p } || (request.url.host == "www.omdbapi.com" && request.url.queryParameter("t") != null)
     }
-    private val LIST_PATHS = listOf("/trending/", "/popular", "/now_playing", "/on_the_air", "/search", "/filter", "/find/")
+    private val LIST_PATHS = listOf("/trending/", "/popular", "/upcoming", "/discover/", "/now_playing", "/on_the_air", "/search", "/filter", "/find/")
 
     private fun isSeriesRequest(request: Request): Boolean {
         val p = request.url.encodedPath
