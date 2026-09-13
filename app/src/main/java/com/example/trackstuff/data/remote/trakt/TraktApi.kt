@@ -60,7 +60,7 @@ data class TraktIds(
 )
 
 @JsonClass(generateAdapter = true)
-data class TraktMedia(val title: String? = null, val year: Int? = null, val ids: TraktIds)
+data class TraktMedia(val title: String? = null, val year: Int? = null, val ids: TraktIds, @Json(name = "aired_episodes") val airedEpisodes: Int? = null)
 
 @JsonClass(generateAdapter = true)
 data class TraktEpisodeRef(val number: Int, val plays: Int? = null)
@@ -93,7 +93,16 @@ data class TraktSyncBody(
 )
 
 @JsonClass(generateAdapter = true)
-data class TraktSyncResult(val added: Map<String, Int>? = null, val existing: Map<String, Int>? = null, val deleted: Map<String, Int>? = null)
+data class TraktSyncResult(val added: Map<String, Int>? = null, val existing: Map<String, Int>? = null, val deleted: Map<String, Int>? = null, @Json(name = "not_found") val notFound: TraktNotFound? = null)
+
+/** Items Trakt could not resolve from the ids sent. */
+@JsonClass(generateAdapter = true)
+data class TraktNotFound(val movies: List<TraktIdsHolder> = emptyList(), val shows: List<TraktIdsHolder> = emptyList()) {
+    fun all(): List<TraktIds> = (movies + shows).map { it.ids }
+}
+
+@JsonClass(generateAdapter = true)
+data class TraktIdsHolder(val ids: TraktIds)
 
 @JsonClass(generateAdapter = true)
 data class TraktActivities(val all: String? = null)

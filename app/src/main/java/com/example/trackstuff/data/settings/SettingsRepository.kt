@@ -13,7 +13,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+// A corrupt preferences file must not crash the app at every start: it is replaced by empty preferences.
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "settings",
+    corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() },
+)
 
 private fun String?.orDefault(default: String): String = if (isNullOrBlank()) default else this
 
@@ -70,6 +74,9 @@ data class AuthTokens(
     val omdbOrgImportedAt: Long = 0,
     /** Date of the last IMDb dataset import (0 = never). */
     val imdbImportedAt: Long = 0,
+    /** True while an import rewrites the local databases; still true after a crash = data incomplete. */
+    val imdbIncomplete: Boolean = false,
+    val omdbOrgIncomplete: Boolean = false,
     /** Importer format version of the current IMDb data; an older value allows a re-import before the monthly limit. */
     val imdbFormatVersion: Int = 0,
 ) {
@@ -108,6 +115,8 @@ class SettingsRepository(private val context: Context) {
         val OMDB_ORG_IMPORTED_AT = longPreferencesKey("omdb_org_imported_at")
         val IMDB_IMPORTED_AT = longPreferencesKey("imdb_imported_at")
         val IMDB_FORMAT = androidx.datastore.preferences.core.intPreferencesKey("imdb_format_version")
+        val IMDB_INCOMPLETE = androidx.datastore.preferences.core.booleanPreferencesKey("imdb_incomplete")
+        val OMDB_ORG_INCOMPLETE = androidx.datastore.preferences.core.booleanPreferencesKey("omdb_org_incomplete")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -144,6 +153,8 @@ class SettingsRepository(private val context: Context) {
             omdbOrgImportedAt = p[Keys.OMDB_ORG_IMPORTED_AT] ?: 0,
             imdbImportedAt = p[Keys.IMDB_IMPORTED_AT] ?: 0,
             imdbFormatVersion = p[Keys.IMDB_FORMAT] ?: 0,
+            imdbIncomplete = p[Keys.IMDB_INCOMPLETE] ?: false,
+            omdbOrgIncomplete = p[Keys.OMDB_ORG_INCOMPLETE] ?: false,
         )
     }
 
@@ -236,10 +247,15 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun saveOmdbOrgImportedAt(at: Long) {
-        context.dataStore.edit { p -> p[Keys.OMDB_ORG_IMPORTED_AT] = at }
+        context.dataStore.edit { p -> p[Keys.OMDB_ORG_IMPORTED_AT] = at; p[Keys.OMDB_ORG_INCOMPLETE] = false }
     }
 
     suspend fun saveImdbImportedAt(at: Long, formatVersion: Int) {
-        context.dataStore.edit { p -> p[Keys.IMDB_IMPORTED_AT] = at; p[Keys.IMDB_FORMAT] = formatVersion }
+        context.dataStore.edit { p -> p[Keys.IMDB_IMPORTED_AT] = at; p[Keys.IMDB_FORMAT] = formatVersion; p[Keys.IMDB_INCOMPLETE] = false }
+    }
+
+    /** Marks the local IMDb / omdb.org data as being rewritten (cleared again when the import completes). */
+    suspend fun setImportIncomplete(imdb: Boolean? = null, omdbOrg: Boolean? = null) {
+        context.dataStore.edit { p -> imdb?.let { p[Keys.IMDB_INCOMPLETE] = it }; omdbOrg?.let { p[Keys.OMDB_ORG_INCOMPLETE] = it } }
     }
 }

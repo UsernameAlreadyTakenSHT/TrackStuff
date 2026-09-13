@@ -9,6 +9,7 @@ import com.example.trackstuff.domain.MediaDetails
 import com.example.trackstuff.domain.MediaKind
 import com.example.trackstuff.domain.UserTracking
 import com.example.trackstuff.domain.WatchStatus
+import com.example.trackstuff.domain.fillMissingFrom
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -46,9 +47,15 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
         }.also { onLocalChange?.invoke() }
     }
 
-    /** Adds a title imported from a sync service, without a full page (enriched later). */
-    suspend fun addStub(details: MediaDetails, tracking: UserTracking): Long =
-        dao.upsert(MediaEntity.from(details, tracking, needsEnrichment = true))
+    /**
+     * Adds a title imported from a sync service, without a full page (enriched later). Its timestamps are
+     * aligned on the sync time so that the item is neither "locally newer" nor pushed straight back.
+     */
+    suspend fun addStub(details: MediaDetails, tracking: UserTracking): Long {
+        val t = tracking.lastSyncedTrakt ?: tracking.lastSyncedSimkl ?: System.currentTimeMillis()
+        val aligned = tracking.copy(addedAt = t, updatedAt = t, syncedStatus = tracking.status, syncedSeason = tracking.currentSeason, syncedEpisode = tracking.currentEpisode)
+        return dao.upsert(MediaEntity.from(details, aligned, needsEnrichment = true))
+    }
 
     suspend fun updateTracking(localId: Long, transform: (UserTracking) -> UserTracking) {
         val e = dao.getById(localId) ?: return
@@ -68,13 +75,21 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
         dao.update(e.copy(kind = kind, updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun markSynced(localId: Long, trakt: Boolean, simkl: Boolean, ids: ExternalIds? = null) {
+    /**
+     * Records a successful sync with a service. [at] is the time the pushed snapshot was taken: an edit made
+     * while the requests were in flight keeps `updatedAt > lastSynced` and is pushed next time. When
+     * [pushed] is given (a push), the status / position sent become the reference for the next delta.
+     */
+    suspend fun markSynced(localId: Long, trakt: Boolean, simkl: Boolean, ids: ExternalIds? = null, at: Long = System.currentTimeMillis(), pushed: UserTracking? = null) {
         val e = dao.getById(localId) ?: return
-        val now = System.currentTimeMillis()
+        val now = at
         dao.update(
             e.copy(
                 lastSyncedTrakt = if (trakt) now else e.lastSyncedTrakt,
                 lastSyncedSimkl = if (simkl) now else e.lastSyncedSimkl,
+                syncedStatus = pushed?.status ?: e.syncedStatus,
+                syncedSeason = pushed?.currentSeason ?: e.syncedSeason,
+                syncedEpisode = pushed?.currentEpisode ?: e.syncedEpisode,
                 traktId = ids?.traktId ?: e.traktId,
                 simklId = ids?.simklId ?: e.simklId,
                 omdbOrgId = e.omdbOrgId ?: ids?.omdbOrgId,
@@ -83,6 +98,12 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
                 tvdbId = e.tvdbId ?: ids?.tvdbId,
             )
         )
+    }
+
+    /** Forgets the sync state with a service (disconnect): items are neither pushed as changes nor reconciled as removals. */
+    suspend fun clearSyncState(trakt: Boolean, simkl: Boolean) {
+        if (trakt) dao.clearTraktSync()
+        if (simkl) dao.clearSimklSync()
     }
 
     /** Removal by the user: the removal is also scheduled on the services the title had been synced with. */
@@ -124,7 +145,8 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
             d.ids.imdbId?.let { "i=" + it },
         )
         if (markers.isNotEmpty() && com.example.trackstuff.data.remote.RefreshLimiter.tryAcquire("title:$localId")) com.example.trackstuff.data.remote.Network.evict { url -> markers.any { it in url } }
-        val fresh = metadata.details(d.ids, d.isSeries, d.title, d.year)
+        // A source that is down today must not degrade the stored page: fresh values win, old ones fill the gaps.
+        val fresh = metadata.details(d.ids, d.isSeries, d.title, d.year).fillMissingFrom(d)
         // Keep the category chosen by the user when it differs from the automatic guess.
         val kind = if (d.kind != fresh.kind && d.kind != MediaKind.MOVIE && d.kind != MediaKind.SERIES) d.kind else fresh.kind
         updateDetails(localId, fresh.copy(kind = kind, ids = d.ids.merge(fresh.ids)))

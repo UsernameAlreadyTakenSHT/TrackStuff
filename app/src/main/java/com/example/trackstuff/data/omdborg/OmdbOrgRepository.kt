@@ -20,6 +20,7 @@ import com.example.trackstuff.domain.guessKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,9 +44,9 @@ sealed class OmdbImportState {
     data class Error(val message: String) : OmdbImportState()
 }
 
-data class OmdbOrgInfo(val titleCount: Int, val lastImportAt: Long?) {
-    /** Date from which a new download is allowed (at most once a month). */
-    val nextAllowedAt: Long? get() = lastImportAt?.plus(OmdbOrgRepository.MIN_INTERVAL_MS)
+data class OmdbOrgInfo(val titleCount: Int, val lastImportAt: Long?, val incomplete: Boolean = false) {
+    /** Date from which a new download is allowed (at most once a month; right away after an interrupted import). */
+    val nextAllowedAt: Long? get() = if (incomplete) null else lastImportAt?.plus(OmdbOrgRepository.MIN_INTERVAL_MS)
     /** An empty database can always be downloaded; a populated one at most once a month. */
     val canDownload: Boolean get() = titleCount == 0 || nextAllowedAt?.let { System.currentTimeMillis() >= it } ?: true
 }
@@ -66,9 +67,13 @@ class OmdbOrgRepository(
     private val _state = MutableStateFlow<OmdbImportState>(OmdbImportState.Idle)
     val state: StateFlow<OmdbImportState> = _state
 
-    suspend fun info(): OmdbOrgInfo = OmdbOrgInfo(dao.count(), settingsRepo.currentTokens().omdbOrgImportedAt.takeIf { it > 0 })
+    suspend fun info(): OmdbOrgInfo {
+        val t = settingsRepo.currentTokens()
+        return OmdbOrgInfo(dao.count(), t.omdbOrgImportedAt.takeIf { it > 0 }, incomplete = t.omdbOrgIncomplete)
+    }
 
-    suspend fun isAvailable(): Boolean = dao.count() > 0
+    /** Data usable: imported at least once and not left half-written by an interrupted import. */
+    suspend fun isAvailable(): Boolean = !settingsRepo.currentTokens().omdbOrgIncomplete && dao.count() > 0
 
     /** Starts the import in the background (survives screen changes). Refused when the last one is under a month old. */
     fun startImport() {
@@ -103,8 +108,11 @@ class OmdbOrgRepository(
     private class TitleBuilder(val name: String, val isSeries: Boolean, val year: Int?)
 
     private suspend fun import(): Pair<Int, Int> = withContext(Dispatchers.IO) {
-        val lang = settingsRepo.current().language.substringBefore('-').lowercase()
+        // The language is user-typed: only a plain two-letter code may reach the file name / URL.
+        val lang = settingsRepo.current().language.substringBefore('-').lowercase().takeIf { it.matches(Regex("[a-z]{2}")) } ?: "en"
         val dir = File(context.cacheDir, "omdb").apply { mkdirs() }
+        val cancelled = { importJob?.isActive != true }
+        try {
 
         val files = listOf("all_movies", "all_series", "movie_links", "image_ids", "movie_categories", "movie_countries", "movie_details", "all_votes", "movie_abstracts_en") +
             (if (lang != "en") listOf("movie_abstracts_$lang") else emptyList()) + listOf("all_movie_aliases_iso", "all_people", "all_casts")
@@ -127,7 +135,7 @@ class OmdbOrgRepository(
             val f = File(dir, "$name.csv.bz2")
             try {
                 prog.step("Downloading $name (${i + 1}/${files.size})")
-                Downloader.download("$DATA_BASE$name.csv.bz2", f) { p -> prog.update(p) }
+                Downloader.download("$DATA_BASE$name.csv.bz2", f, cancelled) { p -> prog.update(p) }
                 downloaded[name] = f
             } catch (e: Exception) {
                 if (name in optional) Log.w(TAG, "Optional dump $name unavailable: ${e.message}") else throw e
@@ -137,8 +145,8 @@ class OmdbOrgRepository(
         // 2. Lookup tables read into memory
         prog.step("Reading titles")
         val titles = HashMap<Int, TitleBuilder>(100_000)
-        read(downloaded.getValue("all_movies")) { r -> r.id()?.let { titles[it] = TitleBuilder(r[1] ?: return@read, false, yearOf(r.getOrNull(3))) } }
-        read(downloaded.getValue("all_series")) { r -> r.id()?.let { titles[it] = TitleBuilder(r[1] ?: return@read, true, yearOf(r.getOrNull(3))) } }
+        read(downloaded.getValue("all_movies")) { r -> r.id()?.let { titles[it] = TitleBuilder(r.getOrNull(1) ?: return@read, false, yearOf(r.getOrNull(3))) } }
+        read(downloaded.getValue("all_series")) { r -> r.id()?.let { titles[it] = TitleBuilder(r.getOrNull(1) ?: return@read, true, yearOf(r.getOrNull(3))) } }
 
         prog.step("Reading IMDb ids")
         val imdb = HashMap<Int, String>(90_000)
@@ -181,6 +189,8 @@ class OmdbOrgRepository(
 
         // 3. Title insertion
         prog.step("Saving titles")
+        // From here the tables are rewritten: flagged until the end so that a crash never serves partial data.
+        settingsRepo.setImportIncomplete(omdbOrg = true)
         dao.clearAliases(); dao.clearCast(); dao.clearTitles()
         val entities = ArrayList<OmdbTitleEntity>(1000)
         var inserted = 0
@@ -242,15 +252,17 @@ class OmdbOrgRepository(
         if (cast.isNotEmpty()) dao.insertCast(cast)
 
         settingsRepo.saveOmdbOrgImportedAt(System.currentTimeMillis())
-        dir.deleteRecursively()
         inserted to aliasCount
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     private fun List<String?>.id(): Int? = getOrNull(0)?.toIntOrNull()
 
     private fun yearOf(date: String?): Int? = date?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }?.toInt()?.takeIf { it > 1800 }
 
-    private val prog = ImportProgress { _state.value = it }
+    private val prog = ImportProgress { if (importJob?.isActive == true) _state.value = it }
 
     /** Streams a bz2 CSV dump; progress is the share of the compressed file consumed so far. */
     private inline fun read(file: File, block: (List<String?>) -> Unit) {
@@ -258,7 +270,7 @@ class OmdbOrgRepository(
         val counting = CountingInputStream(BufferedInputStream(FileInputStream(file), 1 shl 16))
         BufferedReader(InputStreamReader(BZip2CompressorInputStream(counting, true), Charsets.UTF_8), 1 shl 16).use { r ->
             var rows = 0
-            MysqlCsvReader(r).forEachRecord { block(it); if (++rows % 5_000 == 0 && size > 0) prog.update(counting.count / size) }
+            MysqlCsvReader(r).forEachRecord { block(it); if (++rows % 5_000 == 0) { importJob?.ensureActive(); if (size > 0) prog.update(counting.count / size) } }
         }
     }
 

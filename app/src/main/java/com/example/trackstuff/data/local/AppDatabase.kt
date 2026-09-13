@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /** The user's library. */
-@Database(entities = [MediaEntity::class], version = 7, exportSchema = false)
+@Database(entities = [MediaEntity::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
 
@@ -19,9 +19,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** State as last pushed to the services, for delta pushes and status-transition rules. */
+        private val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN syncedStatus TEXT")
+                db.execSQL("ALTER TABLE media ADD COLUMN syncedSeason INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media ADD COLUMN syncedEpisode INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "trackstuff.db")
-                .addMigrations(MIGRATION_6_7)
+                .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

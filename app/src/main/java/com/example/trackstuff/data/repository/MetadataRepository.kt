@@ -25,6 +25,7 @@ import com.example.trackstuff.domain.Ratings
 import com.example.trackstuff.domain.CastMember
 import com.example.trackstuff.domain.Credits
 import com.example.trackstuff.domain.guessKind
+import com.example.trackstuff.domain.fillMissingFrom
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 
@@ -308,13 +309,21 @@ class MetadataRepository(
         // Resolved once, then kept in the IMDb database: no request at all on later visits.
         imdb.cachedPoster(imdbId)?.let { return it.ifEmpty { null } }
         val s = settingsRepo.current()
-        val url = (if (s.hasOmdb) runCatching { omdb.byImdbId(s.omdbApiKey, imdbId).takeIf { it.ok }?.posterUrl() }.getOrNull() else null)
-            ?: runCatching {
-                val hits = tvdb(s)?.byRemoteId(imdbId)?.data
-                val rec = hits?.firstNotNullOfOrNull { if (isSeries) it.series else it.movie } ?: hits?.firstNotNullOfOrNull { it.series ?: it.movie }
-                TvdbApi.imageUrl(rec?.image)
-            }.getOrNull()
-        runCatching { imdb.savePoster(imdbId, url) }
+        // A definitive "no poster" is only recorded when at least one source answered; a network error
+        // (offline, timeout) must not block the lookup for a week.
+        var answered = false
+        var url: String? = null
+        if (s.hasOmdb) try {
+            url = omdb.byImdbId(s.omdbApiKey, imdbId).takeIf { it.ok }?.posterUrl()
+            answered = true
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "OMDb poster lookup failed: ${errMsg(e)}") }
+        if (url == null) try {
+            val hits = tvdb(s)?.byRemoteId(imdbId)?.data
+            if (hits != null) answered = true
+            val rec = hits?.firstNotNullOfOrNull { if (isSeries) it.series else it.movie } ?: hits?.firstNotNullOfOrNull { it.series ?: it.movie }
+            url = TvdbApi.imageUrl(rec?.image)
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TVDB poster lookup failed: ${errMsg(e)}") }
+        if (url != null || answered) runCatching { imdb.savePoster(imdbId, url) }
         return url
     }
 
@@ -683,39 +692,6 @@ class MetadataRepository(
             certification = rated?.takeIf { it != "N/A" },
         )
     }
-
-    /** Fills the empty fields of `this` with those of `other` (never overwriting existing values). */
-    private fun MediaDetails.fillMissingFrom(other: MediaDetails) = copy(
-        ids = ids.merge(other.ids),
-        overview = overview?.takeIf { it.isNotBlank() } ?: other.overview,
-        overviewSource = if (!overview.isNullOrBlank()) overviewSource else other.overviewSource,
-        posterUrl = posterUrl ?: other.posterUrl,
-        posterSource = if (posterUrl != null) posterSource else other.posterSource,
-        backdropUrl = backdropUrl ?: other.backdropUrl,
-        genres = genres.ifEmpty { other.genres },
-        runtimeMinutes = runtimeMinutes ?: other.runtimeMinutes,
-        numberOfSeasons = numberOfSeasons ?: other.numberOfSeasons,
-        numberOfEpisodes = numberOfEpisodes ?: other.numberOfEpisodes,
-        year = year ?: other.year,
-        originalTitle = originalTitle ?: other.originalTitle,
-        certification = certification ?: other.certification,
-        status = status ?: other.status,
-        credits = credits.fillMissingFrom(other.credits),
-        releaseDate = releaseDate ?: other.releaseDate,
-        countries = countries.ifEmpty { other.countries },
-        studios = studios.ifEmpty { other.studios },
-        nextAired = nextAired ?: other.nextAired,
-        seasonEpisodes = seasonEpisodes.ifEmpty { other.seasonEpisodes },
-        ratings = ratings.copy(
-            tmdb = ratings.tmdb ?: other.ratings.tmdb,
-            imdb = ratings.imdb ?: other.ratings.imdb,
-            imdbVotes = ratings.imdbVotes ?: other.ratings.imdbVotes,
-            rottenTomatoes = ratings.rottenTomatoes ?: other.ratings.rottenTomatoes,
-            metacritic = ratings.metacritic ?: other.ratings.metacritic,
-        ),
-        // A TMDB "Movie" page can be reclassified as Anime/Documentary thanks to TVDB/omdb.org genres.
-        kind = if (kind == MediaKind.MOVIE || kind == MediaKind.SERIES) other.kind.takeIf { it == MediaKind.ANIME || it == MediaKind.DOCUMENTARY } ?: kind else kind,
-    )
 
     companion object {
         /** Number of leading actors displayed. */

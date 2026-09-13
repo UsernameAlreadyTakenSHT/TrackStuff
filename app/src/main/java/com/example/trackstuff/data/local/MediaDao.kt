@@ -46,6 +46,12 @@ interface MediaDao {
     @Update
     suspend fun update(entity: MediaEntity)
 
+    @Query("UPDATE media SET lastSyncedTrakt = NULL, traktId = NULL")
+    suspend fun clearTraktSync()
+
+    @Query("UPDATE media SET lastSyncedSimkl = NULL, simklId = NULL")
+    suspend fun clearSimklSync()
+
     @Delete
     suspend fun delete(entity: MediaEntity)
 }

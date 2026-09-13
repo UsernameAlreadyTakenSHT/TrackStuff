@@ -9,6 +9,7 @@ import com.example.trackstuff.data.remote.simkl.SimklMedia
 import com.example.trackstuff.data.remote.simkl.SimklSeasonRef
 import com.example.trackstuff.data.remote.simkl.SimklSyncBody
 import com.example.trackstuff.data.remote.simkl.SimklSyncItem
+import com.example.trackstuff.data.remote.simkl.SimklSyncResult
 import com.example.trackstuff.data.repository.LibraryRepository
 import com.example.trackstuff.data.settings.SettingsRepository
 import com.example.trackstuff.domain.ExternalIds
@@ -74,6 +75,8 @@ class SimklSyncService(
 
     suspend fun disconnect() {
         settingsRepo.clearSimkl()
+        // Items are no longer "synced with Simkl": another account must not reconcile them away.
+        library.clearSyncState(trakt = false, simkl = true)
         token = null
     }
 
@@ -128,7 +131,7 @@ class SimklSyncService(
     private suspend fun reconcileRemovals(api: SimklApi): Int {
         val present = HashSet<Long>()
         for (type in TYPES) {
-            val part = api.allItemsOf(type, extended = null) ?: continue
+            val part = api.allItemsOf(type, extended = "full") ?: continue
             for (it in part.movies + part.shows + part.anime) {
                 val media = it.show ?: it.movie ?: continue
                 library.findExisting(media.ids(), isSeries = it.show != null)?.let { e -> present += e.localId }
@@ -183,8 +186,9 @@ class SimklSyncService(
         for (it in items) {
             val media = (if (isShow) it.show else it.movie) ?: continue
             val ids = media.ids()
-            val status = statusFromSimkl(it.status) ?: continue
             val progress = parseSxxExx(it.lastWatched)
+            // "watching" / "hold" without any episode marked is still "plan to watch" here (status follows progress).
+            val status = statusFromSimkl(it.status)?.let { st -> if (st == WatchStatus.WATCHING && progress == null) WatchStatus.PLANNED else st } ?: continue
             val existing = library.findExisting(ids, isShow)
             if (existing == null) {
                 val tracking = UserTracking(
@@ -207,7 +211,9 @@ class SimklSyncService(
                     )
                 }
                 if (anime && existing.details.kind != MediaKind.ANIME) library.setKind(existing.localId, MediaKind.ANIME)
-                library.markSynced(existing.localId, trakt = false, simkl = true, ids = ids)
+                // The pulled state is also the reference for the next delta push.
+                val pulledState = existing.tracking.copy(status = status, currentSeason = progress?.first ?: existing.tracking.currentSeason, currentEpisode = progress?.second ?: existing.tracking.currentEpisode)
+                library.markSynced(existing.localId, trakt = false, simkl = true, ids = ids, pushed = pulledState)
             } else {
                 library.markSynced(existing.localId, trakt = false, simkl = false, ids = ids)
             }
@@ -215,21 +221,37 @@ class SimklSyncService(
         return n
     }
 
+    /** True when a Simkl "not_found" entry designates this item (any shared id). */
+    private fun Map<*, *>.matches(i: LibraryItem): Boolean {
+        val ids = this["ids"] as? Map<*, *> ?: return false
+        val d = i.details.ids
+        fun same(key: String, v: String?) = v != null && (ids[key]?.toString()?.substringBefore(".") == v)
+        return same("simkl", d.simklId?.toString()) || same("imdb", d.imdbId) || same("tmdb", d.tmdbId?.toString()) || same("tvdb", d.tvdbId?.toString())
+    }
+
+    /**
+     * Pushes local changes as a delta: statuses that changed, new episodes since the last push, removals of
+     * what is after a position moved back, and a full reset for titles returned to "plan to watch".
+     */
     private suspend fun push(api: SimklApi): Int {
         var n = pushRemovals(api)
+        val snapshotAt = System.currentTimeMillis()
         val toPush = library.all().filter { item ->
-            !item.details.ids.isEmpty && (item.tracking.lastSyncedSimkl == null || item.tracking.updatedAt > item.tracking.lastSyncedSimkl)
+            val ids = item.details.ids
+            val usable = ids.simklId != null || ids.imdbId != null || ids.tmdbId != null || ids.tvdbId != null
+            usable && (item.tracking.lastSyncedSimkl == null || item.tracking.updatedAt > item.tracking.lastSyncedSimkl)
         }
         if (toPush.isEmpty()) return n
 
         fun ids(i: LibraryItem) = i.details.ids.toSimkl()
-        val movies = toPush.filter { !it.details.isSeries }
-        val anime = toPush.filter { it.details.isSeries && it.details.kind == MediaKind.ANIME }
-        val shows = toPush.filter { it.details.isSeries && it.details.kind != MediaKind.ANIME }
+        fun pushedBefore(i: LibraryItem) = if (i.tracking.lastSyncedSimkl != null) i.tracking.syncedStatus else null
+        val notFound = mutableListOf<Map<*, *>>()
+        fun collect(r: SimklSyncResult, vararg keys: String) { keys.forEach { k -> (r.notFound?.get(k) as? List<*>)?.filterIsInstance<Map<*, *>>()?.let { notFound += it } } }
+        fun isAnime(i: LibraryItem) = i.details.isSeries && i.details.kind == MediaKind.ANIME
 
-        // Titles moved back to "plan to watch" lose their watched episodes / plays first (history/remove also
-        // drops the title from every list, so it is re-added by add-to-list right after).
-        val backToPlanned = toPush.filter { it.tracking.status == WatchStatus.PLANNED }
+        // Back to "plan to watch" from a watched state: history/remove drops the title (and its list entry),
+        // add-to-list below puts it back as plantowatch.
+        val backToPlanned = toPush.filter { it.tracking.status == WatchStatus.PLANNED && pushedBefore(it).let { p -> p != null && p != WatchStatus.PLANNED } }
         if (backToPlanned.isNotEmpty()) {
             post {
                 api.removeFromHistory(
@@ -241,39 +263,71 @@ class SimklSyncService(
             }
         }
 
-        // Statuses (lists)
-        val body = SimklSyncBody(
-            movies = movies.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, true)) },
-            shows = shows.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
-            anime = anime.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
-        )
-        val res = post { api.addToList(body) }
-        // A title classified "anime" locally but "series" on Simkl: send it again as a series.
-        if (res.notFoundCount("anime") > 0 && anime.isNotEmpty()) {
-            post { api.addToList(SimklSyncBody(shows = anime.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) })) }
+        // Statuses (lists): everything whose status changed since the last push (or never pushed).
+        val statusChanged = toPush.filter { pushedBefore(it) != it.tracking.status }
+        if (statusChanged.isNotEmpty()) {
+            val movies = statusChanged.filter { !it.details.isSeries }
+            val anime = statusChanged.filter { isAnime(it) }
+            val shows = statusChanged.filter { it.details.isSeries && !isAnime(it) }
+            val res = post {
+                api.addToList(
+                    SimklSyncBody(
+                        movies = movies.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, true)) },
+                        shows = shows.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
+                        anime = anime.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
+                    )
+                )
+            }
+            // Simkl classifies anime and shows itself: retry each not-found series in the other category.
+            val retryAsShows = anime.filter { a -> (res.notFound?.get("anime") as? List<*>)?.filterIsInstance<Map<*, *>>()?.any { it.matches(a) } == true }
+            val retryAsAnime = shows.filter { s -> (res.notFound?.get("shows") as? List<*>)?.filterIsInstance<Map<*, *>>()?.any { it.matches(s) } == true }
+            collect(res, "movies")
+            if (retryAsShows.isNotEmpty() || retryAsAnime.isNotEmpty()) {
+                val res2 = post {
+                    api.addToList(
+                        SimklSyncBody(
+                            shows = retryAsShows.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
+                            anime = retryAsAnime.map { SimklSyncItem(ids(it), to = statusToSimkl(it.tracking.status, false)) },
+                        )
+                    )
+                }
+                collect(res2, "shows", "anime")
+            }
         }
 
-        // Progress of series in progress
-        val inProgress = (shows + anime).filter { it.tracking.status == WatchStatus.WATCHING && it.tracking.currentSeason > 0 }
-        if (inProgress.isNotEmpty()) {
-            fun hist(i: LibraryItem) = SimklSyncItem(
-                ids(i),
-                seasons = episodesUpTo(i.tracking.currentSeason, i.tracking.currentEpisode, i.details.seasonEpisodes).map { (num, eps) -> SimklSeasonRef(num, eps.map { SimklEpisodeRef(it) }) },
-            )
-            post { api.addHistory(SimklSyncBody(shows = inProgress.map { hist(it) })) }
-            // Un-mark everything after the current position, in case the user moved back.
-            fun after(i: LibraryItem) = SimklSyncItem(
-                ids(i),
-                seasons = episodesAfter(i.tracking.currentSeason, i.tracking.currentEpisode, i.details.seasonEpisodes).map { (num, eps) -> SimklSeasonRef(num, eps.map { SimklEpisodeRef(it) }) },
-            )
-            post { api.removeFromHistory(SimklSyncBody(shows = inProgress.map { after(it) })) }
+        // Episodes watched since the last push (series in progress), sent in the right category.
+        val inProgress = toPush.filter { it.details.isSeries && it.tracking.status == WatchStatus.WATCHING && it.tracking.currentSeason > 0 }
+        fun seasons(pairs: List<Pair<Int, List<Int>>>) = pairs.map { (num, eps) -> SimklSeasonRef(num, if (eps.isEmpty()) null else eps.map { SimklEpisodeRef(it) }) }
+        val forward = inProgress.mapNotNull { s ->
+            val t = s.tracking
+            val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.syncedSeason to t.syncedEpisode else 0 to 0
+            val delta = episodesBetween(from.first, from.second, t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
+            if (delta.isEmpty()) null else s to SimklSyncItem(ids(s), seasons = seasons(delta))
+        }
+        if (forward.isNotEmpty()) {
+            post { api.addHistory(SimklSyncBody(shows = forward.filter { !isAnime(it.first) }.map { it.second }, anime = forward.filter { isAnime(it.first) }.map { it.second })) }
+        }
+        // Moved back: un-mark what is after the new position (never an empty list, which would drop the title).
+        val back = inProgress.mapNotNull { s ->
+            val t = s.tracking
+            val before = pushedBefore(s) ?: return@mapNotNull null
+            val wasAhead = before == WatchStatus.COMPLETED || t.syncedSeason > t.currentSeason || (t.syncedSeason == t.currentSeason && t.syncedEpisode > t.currentEpisode)
+            if (!wasAhead) return@mapNotNull null
+            val after = episodesAfter(t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
+            if (after.isEmpty()) null else s to SimklSyncItem(ids(s), seasons = seasons(after))
+        }
+        if (back.isNotEmpty()) {
+            post { api.removeFromHistory(SimklSyncBody(shows = back.filter { !isAnime(it.first) }.map { it.second }, anime = back.filter { isAnime(it.first) }.map { it.second })) }
         }
 
-        toPush.forEach { library.markSynced(it.localId, trakt = false, simkl = true) }
-        return n + toPush.size
+        for (item in toPush) {
+            if (notFound.any { it.matches(item) }) { Log.w(TAG, "Simkl does not know ${item.details.title}, left unsynced"); continue }
+            library.markSynced(item.localId, trakt = false, simkl = true, at = snapshotAt, pushed = item.tracking)
+            n++
+        }
+        return n
     }
 
-    /** Titles removed locally: removed from the Simkl history and lists. */
     private suspend fun pushRemovals(api: SimklApi): Int {
         val pending = settingsRepo.pendingRemovals().filter { it.simkl && !it.ids.isEmpty }
         if (pending.isEmpty()) return 0

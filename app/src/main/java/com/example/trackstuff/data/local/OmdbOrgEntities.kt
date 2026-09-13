@@ -143,9 +143,12 @@ interface OmdbOrgDao {
 }
 
 /** Normalization shared by import and search: lower case, no accents nor superfluous punctuation. */
+private val DIACRITICS = Regex("\\p{M}+")
+private val NON_ALNUM = Regex("[^\\p{L}\\p{N}]+")
+
 fun normalizeTitle(s: String): String =
     Normalizer.normalize(s, Normalizer.Form.NFD)
-        .replace(Regex("\\p{M}+"), "")
+        .replace(DIACRITICS, "")
         .lowercase()
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .replace(NON_ALNUM, " ")
         .trim()

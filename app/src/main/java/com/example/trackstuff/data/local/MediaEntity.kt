@@ -78,6 +78,9 @@ data class MediaEntity(
     val updatedAt: Long,
     val lastSyncedTrakt: Long?,
     val lastSyncedSimkl: Long?,
+    val syncedStatus: WatchStatus? = null,
+    val syncedSeason: Int = 0,
+    val syncedEpisode: Int = 0,
     /** True when the page has not been enriched by TMDB/TVDB/OMDb yet (e.g. imported from Trakt). */
     val needsEnrichment: Boolean = false,
 ) {
@@ -119,6 +122,9 @@ data class MediaEntity(
             updatedAt = updatedAt,
             lastSyncedTrakt = lastSyncedTrakt,
             lastSyncedSimkl = lastSyncedSimkl,
+            syncedStatus = syncedStatus,
+            syncedSeason = syncedSeason,
+            syncedEpisode = syncedEpisode,
         ),
     )
 
@@ -171,6 +177,9 @@ data class MediaEntity(
             updatedAt = tracking.updatedAt,
             lastSyncedTrakt = tracking.lastSyncedTrakt,
             lastSyncedSimkl = tracking.lastSyncedSimkl,
+            syncedStatus = tracking.syncedStatus,
+            syncedSeason = tracking.syncedSeason,
+            syncedEpisode = tracking.syncedEpisode,
             needsEnrichment = needsEnrichment,
         )
     }
@@ -190,10 +199,22 @@ class MediaConverters {
     @TypeConverter fun stringToIntList(v: String): List<Int> = v.split(",").mapNotNull { it.toIntOrNull() }
     @TypeConverter fun castToJson(v: List<CastJson>): String = castList.toJson(v)
     @TypeConverter fun jsonToCast(v: String): List<CastJson> = castList.fromJson(v) ?: emptyList()
+    // Enum converters tolerate unknown values (older/newer app versions) instead of crashing the library screen.
     @TypeConverter fun kindToString(v: MediaKind): String = v.name
-    @TypeConverter fun stringToKind(v: String): MediaKind = MediaKind.valueOf(v)
+    @TypeConverter fun stringToKind(v: String): MediaKind = MediaKind.entries.firstOrNull { it.name == v } ?: MediaKind.MOVIE
     @TypeConverter fun statusToString(v: WatchStatus): String = v.name
-    @TypeConverter fun stringToStatus(v: String): WatchStatus = WatchStatus.valueOf(v)
+    @TypeConverter fun stringToStatus(v: String): WatchStatus = legacyStatus(v)
+    @TypeConverter fun optStatusToString(v: WatchStatus?): String? = v?.name
+    @TypeConverter fun stringToOptStatus(v: String?): WatchStatus? = v?.let { legacyStatus(it) }
     @TypeConverter fun sourceToString(v: DataSource?): String? = v?.name
-    @TypeConverter fun stringToSource(v: String?): DataSource? = v?.let { DataSource.valueOf(it) }
+    @TypeConverter fun stringToSource(v: String?): DataSource? = v?.let { s -> DataSource.entries.firstOrNull { it.name == s } }
+
+    companion object {
+        /** Maps statuses of older versions (on hold, dropped) and unknown values onto the current ones. */
+        fun legacyStatus(name: String): WatchStatus = when (name) {
+            "ON_HOLD" -> WatchStatus.WATCHING
+            "DROPPED" -> WatchStatus.PLANNED
+            else -> WatchStatus.entries.firstOrNull { it.name == name } ?: WatchStatus.PLANNED
+        }
+    }
 }

@@ -93,10 +93,10 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
                         item(key = "${section.source.name}-${section.media.name}-${section.title}") {
                             PosterRow(
                                 title = section.title,
-                                items = section.items.map { r ->
+                                items = section.items.mapIndexed { index, r ->
                                     val localId = state.inLibrary[r]
                                     RowItem(
-                                        key = "${r.source}-${r.ids.tmdbId ?: r.ids.tvdbId ?: r.title}-${r.isSeries}",
+                                        key = "${r.source}-${r.ids.tmdbId ?: r.ids.tvdbId ?: r.ids.imdbId ?: r.ids.omdbOrgId ?: r.title}-${r.isSeries}-$index",
                                         title = r.title,
                                         year = r.year,
                                         posterUrl = r.posterUrl ?: r.ids.imdbId?.let { state.posters[it] },

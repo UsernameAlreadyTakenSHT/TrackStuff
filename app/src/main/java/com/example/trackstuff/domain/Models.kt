@@ -156,6 +156,10 @@ data class UserTracking(
     val updatedAt: Long = System.currentTimeMillis(),
     val lastSyncedTrakt: Long? = null,
     val lastSyncedSimkl: Long? = null,
+    /** Status and position as last pushed to the services (null status = never pushed): drives delta pushes. */
+    val syncedStatus: WatchStatus? = null,
+    val syncedSeason: Int = 0,
+    val syncedEpisode: Int = 0,
 )
 
 data class LibraryItem(
@@ -180,3 +184,37 @@ fun guessKind(isSeries: Boolean, genreIds: List<Int>, genreNames: List<String>, 
         else -> MediaKind.MOVIE
     }
 }
+
+/** Fills the empty fields of `this` with those of `other` (never overwriting existing values). */
+fun MediaDetails.fillMissingFrom(other: MediaDetails) = copy(
+    ids = ids.merge(other.ids),
+    overview = overview?.takeIf { it.isNotBlank() } ?: other.overview,
+    overviewSource = if (!overview.isNullOrBlank()) overviewSource else other.overviewSource,
+    posterUrl = posterUrl ?: other.posterUrl,
+    posterSource = if (posterUrl != null) posterSource else other.posterSource,
+    backdropUrl = backdropUrl ?: other.backdropUrl,
+    genres = genres.ifEmpty { other.genres },
+    runtimeMinutes = runtimeMinutes ?: other.runtimeMinutes,
+    numberOfSeasons = numberOfSeasons ?: other.numberOfSeasons,
+    numberOfEpisodes = numberOfEpisodes ?: other.numberOfEpisodes,
+    year = year ?: other.year,
+    originalTitle = originalTitle ?: other.originalTitle,
+    certification = certification ?: other.certification,
+    status = status ?: other.status,
+    credits = credits.fillMissingFrom(other.credits),
+    releaseDate = releaseDate ?: other.releaseDate,
+    countries = countries.ifEmpty { other.countries },
+    studios = studios.ifEmpty { other.studios },
+    nextAired = nextAired ?: other.nextAired,
+    seasonEpisodes = seasonEpisodes.ifEmpty { other.seasonEpisodes },
+    ratings = ratings.copy(
+        tmdb = ratings.tmdb ?: other.ratings.tmdb,
+        tmdbVotes = ratings.tmdbVotes ?: other.ratings.tmdbVotes,
+        imdb = ratings.imdb ?: other.ratings.imdb,
+        imdbVotes = ratings.imdbVotes ?: other.ratings.imdbVotes,
+        rottenTomatoes = ratings.rottenTomatoes ?: other.ratings.rottenTomatoes,
+        metacritic = ratings.metacritic ?: other.ratings.metacritic,
+    ),
+    // A TMDB "Movie" page can be reclassified as Anime/Documentary thanks to TVDB/omdb.org genres.
+    kind = if (kind == MediaKind.MOVIE || kind == MediaKind.SERIES) other.kind.takeIf { it == MediaKind.ANIME || it == MediaKind.DOCUMENTARY } ?: kind else kind,
+)

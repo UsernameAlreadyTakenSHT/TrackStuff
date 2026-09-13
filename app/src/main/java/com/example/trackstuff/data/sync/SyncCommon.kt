@@ -82,3 +82,30 @@ internal fun episodesAfter(season: Int, episode: Int, seasonEpisodes: List<Int> 
 
 private const val UNKNOWN_SEASON_EPISODES = 50
 private const val UNKNOWN_SEASON_COUNT = 10
+
+/**
+ * Episodes to mark as watched when moving forward from [fromSeason]/[fromEpisode] (already pushed) to
+ * [toSeason]/[toEpisode]: [episodesUpTo] of the new position minus what was already sent. An empty result
+ * means nothing to send. Seasons whose length is unknown are sent whole (empty episode list) when they were
+ * not started before; a partially known season uses a generous range.
+ */
+internal fun episodesBetween(fromSeason: Int, fromEpisode: Int, toSeason: Int, toEpisode: Int, seasonEpisodes: List<Int> = emptyList()): List<Pair<Int, List<Int>>> {
+    if (toSeason <= 0) return emptyList()
+    if (fromSeason <= 0) return episodesUpTo(toSeason, toEpisode, seasonEpisodes)
+    if (toSeason < fromSeason || (toSeason == fromSeason && toEpisode <= fromEpisode)) return emptyList()
+    val out = mutableListOf<Pair<Int, List<Int>>>()
+    for (s in fromSeason..toSeason) {
+        val count = seasonEpisodes.getOrNull(s - 1)
+        val first = if (s == fromSeason) fromEpisode + 1 else 1
+        val last = when {
+            s == toSeason -> toEpisode
+            count != null -> count
+            else -> if (s == fromSeason) UNKNOWN_SEASON_EPISODES else 0 // 0 → whole season (empty list) below
+        }
+        when {
+            s != fromSeason && s != toSeason && count == null -> out += s to emptyList() // whole unknown season
+            first <= last -> out += s to (first..last).toList()
+        }
+    }
+    return out
+}

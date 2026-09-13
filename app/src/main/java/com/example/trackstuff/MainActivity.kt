@@ -26,6 +26,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // Automatic sync when returning to the foreground (at most once every 15 minutes).
-        (application as TrackStuffApp).container.sync.onForeground()
+        (application as TrackStuffApp).container.sync.apply { inForeground = true; onForeground() }
+    }
+
+    override fun onStop() {
+        (application as TrackStuffApp).container.sync.inForeground = false
+        super.onStop()
     }
 }

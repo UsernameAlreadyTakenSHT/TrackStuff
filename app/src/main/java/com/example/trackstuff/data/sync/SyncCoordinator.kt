@@ -74,10 +74,15 @@ class SyncCoordinator(
         }
     }
 
+    /** True while the app has a started activity; the network callback only syncs in that case (Simkl rule). */
+    @Volatile var inForeground = false
+    private var networkRetry: Job? = null
+
     /** Called when a network with internet access becomes available: retries a sync that failed while offline. */
     fun onNetworkAvailable() {
-        if (!retryPending) return
-        scope.launch {
+        if (!retryPending || !inForeground) return
+        networkRetry?.cancel()
+        networkRetry = scope.launch {
             delay(NETWORK_SETTLE_MS)
             syncAll()
         }
@@ -104,7 +109,8 @@ class SyncCoordinator(
                     }
                 }
                 _state.update { it.copy(auth = AuthProgress(service, connected = ok)) }
-                if (ok) syncAll()
+                // First sync in its own job: cancelling the sign-in UI must not cancel a sync half-way.
+                if (ok) scope.launch { syncAll() }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -142,6 +148,9 @@ class SyncCoordinator(
             val report = when (service) { SyncService.TRAKT -> trakt.sync(); SyncService.SIMKL -> simkl.sync() }
             if (report.errors.isNotEmpty()) retryPending = true
             report.summary(service.label)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            _state.update { it.copy(running = null) }
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "${service.label} sync failed", e)
             retryPending = true

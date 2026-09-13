@@ -118,3 +118,43 @@ class EpisodesAfterTest {
         assertEquals(11, after.size)
     }
 }
+
+class EpisodesBetweenTest {
+    @Test
+    fun `never pushed sends everything up to the position`() {
+        assertEquals(listOf(1 to listOf(1, 2), 2 to listOf(1)), com.example.trackstuff.data.sync.episodesBetween(0, 0, 2, 1, listOf(2, 3)))
+    }
+
+    @Test
+    fun `forward within a season sends only the new episodes`() {
+        assertEquals(listOf(1 to listOf(3, 4)), com.example.trackstuff.data.sync.episodesBetween(1, 2, 1, 4, listOf(6)))
+    }
+
+    @Test
+    fun `forward across seasons`() {
+        assertEquals(listOf(1 to listOf(5, 6), 2 to listOf(1, 2, 3), 3 to listOf(1)), com.example.trackstuff.data.sync.episodesBetween(1, 4, 3, 1, listOf(6, 3, 5)))
+    }
+
+    @Test
+    fun `no move or move back sends nothing`() {
+        assertEquals(emptyList<Pair<Int, List<Int>>>(), com.example.trackstuff.data.sync.episodesBetween(2, 3, 2, 3))
+        assertEquals(emptyList<Pair<Int, List<Int>>>(), com.example.trackstuff.data.sync.episodesBetween(2, 3, 1, 5))
+    }
+
+    @Test
+    fun `unknown season lengths`() {
+        // Season 1 partially known: generous range; season 2 unknown and untouched: whole season; season 3: explicit.
+        val r = com.example.trackstuff.data.sync.episodesBetween(1, 48, 3, 2)
+        assertEquals(listOf(1 to listOf(49, 50), 2 to emptyList(), 3 to listOf(1, 2)), r)
+    }
+}
+
+class LegacyStatusTest {
+    @Test
+    fun `old statuses map onto the current ones`() {
+        assertEquals(com.example.trackstuff.domain.WatchStatus.WATCHING, com.example.trackstuff.data.local.MediaConverters.legacyStatus("ON_HOLD"))
+        assertEquals(com.example.trackstuff.domain.WatchStatus.PLANNED, com.example.trackstuff.data.local.MediaConverters.legacyStatus("DROPPED"))
+        assertEquals(com.example.trackstuff.domain.WatchStatus.COMPLETED, com.example.trackstuff.data.local.MediaConverters.legacyStatus("COMPLETED"))
+        assertEquals(com.example.trackstuff.domain.WatchStatus.PLANNED, com.example.trackstuff.data.local.MediaConverters.legacyStatus("garbage"))
+    }
+}

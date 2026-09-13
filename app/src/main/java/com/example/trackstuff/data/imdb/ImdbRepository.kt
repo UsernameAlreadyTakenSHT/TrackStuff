@@ -26,6 +26,7 @@ import com.example.trackstuff.domain.MediaSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,9 +42,9 @@ import java.util.zip.GZIPInputStream
 private const val TAG = "Imdb"
 private const val NULL = "\\N"
 
-data class ImdbInfo(val titleCount: Int, val lastImportAt: Long?, val hasFullData: Boolean = false, val formatOutdated: Boolean = false) {
-    /** Null when a re-import is allowed right away (empty database, or data produced by an older importer). */
-    val nextAllowedAt: Long? get() = if (formatOutdated) null else lastImportAt?.plus(OmdbOrgRepository.MIN_INTERVAL_MS)
+data class ImdbInfo(val titleCount: Int, val lastImportAt: Long?, val hasFullData: Boolean = false, val formatOutdated: Boolean = false, val incomplete: Boolean = false) {
+    /** Null when a re-import is allowed right away (empty database, interrupted import, or data produced by an older importer). */
+    val nextAllowedAt: Long? get() = if (formatOutdated || incomplete) null else lastImportAt?.plus(OmdbOrgRepository.MIN_INTERVAL_MS)
     /** An empty database can always be downloaded; a populated one at most once a month. */
     val canDownload: Boolean get() = titleCount == 0 || nextAllowedAt?.let { System.currentTimeMillis() >= it } ?: true
 }
@@ -72,10 +73,11 @@ class ImdbRepository(
     suspend fun info(): ImdbInfo {
         val t = settingsRepo.currentTokens()
         val count = dao.count()
-        return ImdbInfo(count, t.imdbImportedAt.takeIf { it > 0 }, dao.crewCount() > 0, formatOutdated = count > 0 && t.imdbFormatVersion < FORMAT_VERSION)
+        return ImdbInfo(count, t.imdbImportedAt.takeIf { it > 0 }, dao.crewCount() > 0, formatOutdated = count > 0 && t.imdbFormatVersion < FORMAT_VERSION, incomplete = t.imdbIncomplete)
     }
 
-    suspend fun isAvailable(): Boolean = dao.count() > 0
+    /** Data usable: imported at least once and not left half-written by an interrupted import. */
+    suspend fun isAvailable(): Boolean = !settingsRepo.currentTokens().imdbIncomplete && dao.count() > 0
 
     fun startImport() {
         if (importJob?.isActive == true) return
@@ -111,13 +113,15 @@ class ImdbRepository(
         val names = if (full) listOf("title.ratings", "title.basics", "title.episode", "title.crew", "title.principals", "name.basics", "title.akas")
         else listOf("title.ratings", "title.basics", "title.episode")
         val files = names.associateWith { File(dir, "$it.tsv.gz") }
+        val cancelled = { importJob?.isActive != true }
+        try {
         // Plan for the overall progress: one download step per file, then the parsing steps weighted by size.
         val sizes = names.map { APPROX_SIZE_MB.getValue(it) * 1e6 }
         val parseSteps = if (full) listOf("title.ratings", "title.basics", "title.episode", "title.crew", "title.principals", "name.basics", "title.akas") else listOf("title.ratings", "title.basics", "title.episode")
         prog.plan(sizes + parseSteps.map { APPROX_SIZE_MB.getValue(it) * 1e6 * ImportProgress.PARSE_COST })
         names.forEachIndexed { i, n ->
             prog.step("Downloading $n (${i + 1}/${names.size})")
-            Downloader.download("$BASE/$n.tsv.gz", files.getValue(n)) { p -> prog.update(p) }
+            Downloader.download("$BASE/$n.tsv.gz", files.getValue(n), cancelled) { p -> prog.update(p) }
         }
 
         // 1. Ratings: only those with enough votes are kept (≈ 100,000 out of 1.7 M).
@@ -133,6 +137,8 @@ class ImdbRepository(
 
         // 2. Titles: a stream of 11 M lines; only rated movies / series are kept.
         prog.step("Reading titles")
+        // From here the tables are rewritten: flagged until the end so that a crash never serves partial data.
+        settingsRepo.setImportIncomplete(imdb = true)
         dao.clear()
         val kept = HashSet<String>(100_000)
         val batch = ArrayList<ImdbTitleEntity>(2000)
@@ -176,8 +182,10 @@ class ImdbRepository(
         }
 
         settingsRepo.saveImdbImportedAt(System.currentTimeMillis(), FORMAT_VERSION)
-        dir.deleteRecursively()
         inserted
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     /** title.episode: tconst, parentTconst, seasonNumber, episodeNumber → episodes per season of the kept series. */
@@ -203,7 +211,7 @@ class ImdbRepository(
         suspend fun flush() { if (batch.isNotEmpty()) { dao.insertCrew(batch); batch.clear() } }
 
         prog.step("Reading directors and writers")
-        readTsv(crewFile) { c ->
+        readTsv(crewFile, kept) { c ->
             val id = c[0]
             if (id !in kept) return@readTsv
             c.getOrNull(1)?.takeIf { it != NULL }?.split(',')?.take(5)?.forEachIndexed { i, n ->
@@ -218,7 +226,7 @@ class ImdbRepository(
 
         prog.step("Reading cast")
         var seen = 0
-        readTsv(principalsFile) { c ->
+        readTsv(principalsFile, kept) { c ->
             val id = c[0]
             if (id !in kept) return@readTsv
             val category = c.getOrNull(3) ?: return@readTsv
@@ -256,7 +264,7 @@ class ImdbRepository(
         dao.clearAliases()
         val batch = ArrayList<ImdbAliasEntity>(2000)
         var n = 0
-        readTsv(file) { c ->
+        readTsv(file, kept) { c ->
             val id = c[0]
             if (id !in kept) return@readTsv
             val title = c.getOrNull(2)?.takeIf { it != NULL } ?: return@readTsv
@@ -266,13 +274,13 @@ class ImdbRepository(
         if (batch.isNotEmpty()) dao.insertAliases(batch)
     }
 
-    private val prog = ImportProgress { _state.value = it }
+    private val prog = ImportProgress { if (importJob?.isActive == true) _state.value = it }
 
     /**
      * Reads a gzipped TSV line by line (header skipped). IMDb fields contain neither tabs nor quotes.
      * Progress is the share of the compressed file consumed so far.
      */
-    private inline fun readTsv(file: File, block: (List<String>) -> Unit) {
+    private inline fun readTsv(file: File, keepFirstColumn: Set<String>? = null, block: (List<String>) -> Unit) {
         val size = file.length().toFloat()
         val counting = CountingInputStream(BufferedInputStream(FileInputStream(file), 1 shl 16))
         BufferedReader(InputStreamReader(GZIPInputStream(counting), Charsets.UTF_8), 1 shl 16).use { r ->
@@ -280,8 +288,13 @@ class ImdbRepository(
             var lines = 0
             while (true) {
                 val line = r.readLine() ?: break
+                if (++lines % 20_000 == 0) { importJob?.ensureActive(); if (size > 0) prog.update(counting.count / size) }
+                // Cheap pre-filter on the first column before splitting: > 99 % of the rows are dropped.
+                if (keepFirstColumn != null) {
+                    val tab = line.indexOf('\t')
+                    if (tab < 0 || line.substring(0, tab) !in keepFirstColumn) continue
+                }
                 block(line.split('\t'))
-                if (++lines % 20_000 == 0 && size > 0) prog.update(counting.count / size)
             }
         }
     }

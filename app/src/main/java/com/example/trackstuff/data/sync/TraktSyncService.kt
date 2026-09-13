@@ -12,6 +12,7 @@ import com.example.trackstuff.data.remote.trakt.TraktRefreshRequest
 import com.example.trackstuff.data.remote.trakt.TraktSeasonRef
 import com.example.trackstuff.data.remote.trakt.TraktSyncBody
 import com.example.trackstuff.data.remote.trakt.TraktSyncMovie
+import com.example.trackstuff.data.remote.trakt.TraktSyncResult
 import com.example.trackstuff.data.remote.trakt.TraktSyncShow
 import com.example.trackstuff.data.repository.LibraryRepository
 import com.example.trackstuff.data.settings.SettingsRepository
@@ -30,7 +31,6 @@ private const val TAG = "TraktSync"
  *  - Plan to watch  ↔ watchlist
  *  - Watching       → history of watched episodes (current S/E)
  *  - Completed      ↔ history (watched movie / whole show)
- *  - Note        ↔ ratings (1-10)
  */
 class TraktSyncService(
     private val settingsRepo: SettingsRepository,
@@ -76,7 +76,7 @@ class TraktSyncService(
                     token = t.accessToken
                     return true
                 }
-                400 -> Unit // en attente
+                400 -> Unit // pending
                 429 -> interval += 5
                 404, 409, 410, 418 -> throw SyncAuthException("Trakt: authorization denied or expired (${resp.code()})")
                 else -> throw SyncAuthException("Trakt: error ${resp.code()}")
@@ -87,6 +87,8 @@ class TraktSyncService(
 
     suspend fun disconnect() {
         settingsRepo.clearTrakt()
+        // Items are no longer "synced with Trakt": another account must not reconcile them away.
+        library.clearSyncState(trakt = true, simkl = false)
         token = null
     }
 
@@ -122,7 +124,8 @@ class TraktSyncService(
             try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present) } catch (e: Exception) { complete = false; errors += "Watchlist: ${e.message}"; Log.w(TAG, e) }
             try { pulled += pullWatched(api.watchedMovies(), isShow = false, present) } catch (e: Exception) { complete = false; errors += "Watched movies: ${e.message}"; Log.w(TAG, e) }
             try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present) } catch (e: Exception) { complete = false; errors += "Watched shows: ${e.message}"; Log.w(TAG, e) }
-            if (complete) pulled += reconcileRemovals(present)
+            // No reconciliation on the first pull after (re)connecting: nothing local has been pushed there yet.
+            if (complete && since.isNotBlank()) pulled += reconcileRemovals(present)
         }
 
         // ---- Push
@@ -186,13 +189,16 @@ class TraktSyncService(
             val ids = media.ids()
             val existing = library.findExisting(ids, isShow)
             // Progress derived from watched episodes (last season / last episode).
-            val lastSeason = e.seasons.maxByOrNull { it.number }
+            val lastSeason = e.seasons.filter { it.number > 0 }.maxByOrNull { it.number }
             val progress = lastSeason?.let { s -> s.number to (s.episodes.maxOfOrNull { it.number } ?: 0) }
-            val watchedCount = e.seasons.sumOf { it.episodes.size }
+            // Specials (season 0) are not tracked as progress.
+            val watchedCount = e.seasons.filter { it.number > 0 }.sumOf { it.episodes.size }
+            val aired = media.airedEpisodes
 
             if (existing == null) {
+                val completed = !isShow || (aired != null && aired > 0 && watchedCount >= aired)
                 val tracking = UserTracking(
-                    status = if (isShow) WatchStatus.WATCHING else WatchStatus.COMPLETED,
+                    status = if (completed) WatchStatus.COMPLETED else WatchStatus.WATCHING,
                     currentSeason = progress?.first ?: 0,
                     currentEpisode = progress?.second ?: 0,
                     lastSyncedTrakt = now,
@@ -201,8 +207,10 @@ class TraktSyncService(
                 n++
             } else if (!existing.locallyNewer()) {
                 present += existing.localId
-                val total = existing.details.numberOfEpisodes
+                val total = existing.details.numberOfEpisodes ?: aired
                 val completed = !isShow || (total != null && total > 0 && watchedCount >= total)
+                val newSeason = progress?.first ?: existing.tracking.currentSeason
+                val newEpisode = progress?.second ?: existing.tracking.currentEpisode
                 library.updateTracking(existing.localId) { t ->
                     t.copy(
                         status = when {
@@ -210,12 +218,14 @@ class TraktSyncService(
                             t.status == WatchStatus.PLANNED -> WatchStatus.WATCHING
                             else -> t.status
                         },
-                        currentSeason = progress?.first ?: t.currentSeason,
-                        currentEpisode = progress?.second ?: t.currentEpisode,
+                        currentSeason = newSeason,
+                        currentEpisode = newEpisode,
                         lastSyncedTrakt = now,
                     )
                 }
-                library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids)
+                // The pulled state is also the reference for the next delta push.
+                val pulledState = existing.tracking.copy(status = if (completed) WatchStatus.COMPLETED else WatchStatus.WATCHING, currentSeason = newSeason, currentEpisode = newEpisode)
+                library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids, pushed = pulledState)
             } else present += existing.localId
         }
         return n
@@ -235,56 +245,96 @@ class TraktSyncService(
         return pending.size
     }
 
+    private var lastPostAt = 0L
+
+    /** Trakt limits POSTs to one per second. */
+    private suspend fun <T> post(call: suspend () -> T): T {
+        val wait = lastPostAt + POST_INTERVAL_MS - System.currentTimeMillis()
+        if (wait > 0) delay(wait)
+        return try { call() } finally { lastPostAt = System.currentTimeMillis() }
+    }
+
+    /** True when a Trakt "not_found" entry designates this item (any shared id). */
+    private fun TraktIds.matches(i: LibraryItem): Boolean {
+        val d = i.details.ids
+        return (trakt != null && trakt == d.traktId) || (imdb != null && imdb == d.imdbId) || (tmdb != null && tmdb == d.tmdbId) || (tvdb != null && tvdb == d.tvdbId)
+    }
+
+    /**
+     * Pushes local changes. Only the delta since the last push is sent (episodes between the pushed position
+     * and the current one; history removal only on an actual move back or a return to "plan to watch"), so
+     * plays are never duplicated and rewatches recorded elsewhere are preserved.
+     */
     private suspend fun pushLocal(api: TraktApi): Int {
         val removed = pushRemovals(api)
+        val snapshotAt = System.currentTimeMillis()
         val toPush = library.all().filter { item ->
-            !item.details.ids.isEmpty && (item.tracking.lastSyncedTrakt == null || item.tracking.updatedAt > item.tracking.lastSyncedTrakt)
+            val ids = item.details.ids
+            val usable = ids.traktId != null || ids.imdbId != null || ids.tmdbId != null || ids.tvdbId != null
+            usable && (item.tracking.lastSyncedTrakt == null || item.tracking.updatedAt > item.tracking.lastSyncedTrakt)
         }
         if (toPush.isEmpty()) return removed
 
         fun ids(i: LibraryItem) = i.details.ids.toTrakt()
+        /** Reference state for the delta: what was pushed to Trakt before, or nothing if never pushed there. */
+        fun pushedBefore(i: LibraryItem) = if (i.tracking.lastSyncedTrakt != null) i.tracking.syncedStatus else null
         val movies = toPush.filter { !it.details.isSeries }
         val shows = toPush.filter { it.details.isSeries }
+        val notFound = mutableListOf<TraktIds>()
+        fun collect(r: TraktSyncResult) { r.notFound?.let { notFound += it.all() } }
 
-        // Watchlist. A title moved back to "plan to watch" also loses its plays (it may have been completed before).
-        val wlMovies = movies.filter { it.tracking.status == WatchStatus.PLANNED }
-        val wlShows = shows.filter { it.tracking.status == WatchStatus.PLANNED }
-        if (wlMovies.isNotEmpty() || wlShows.isNotEmpty()) {
-            api.removeFromHistory(TraktSyncBody(wlMovies.map { TraktSyncMovie(ids(it)) }, wlShows.map { TraktSyncShow(ids(it)) }))
-            api.addToWatchlist(TraktSyncBody(wlMovies.map { TraktSyncMovie(ids(it)) }, wlShows.map { TraktSyncShow(ids(it)) }))
+        // Back to "plan to watch" from a watched state: plays go, the title returns to the watchlist.
+        val backToPlanned = toPush.filter { it.tracking.status == WatchStatus.PLANNED && pushedBefore(it).let { p -> p != null && p != WatchStatus.PLANNED } }
+        if (backToPlanned.isNotEmpty()) {
+            collect(post { api.removeFromHistory(TraktSyncBody(backToPlanned.filter { !it.details.isSeries }.map { TraktSyncMovie(ids(it)) }, backToPlanned.filter { it.details.isSeries }.map { TraktSyncShow(ids(it)) })) })
+        }
+        // Watchlist: planned titles never sent, or coming back from a watched state.
+        val toWatchlist = toPush.filter { it.tracking.status == WatchStatus.PLANNED && pushedBefore(it) != WatchStatus.PLANNED }
+        if (toWatchlist.isNotEmpty()) {
+            collect(post { api.addToWatchlist(TraktSyncBody(toWatchlist.filter { !it.details.isSeries }.map { TraktSyncMovie(ids(it)) }, toWatchlist.filter { it.details.isSeries }.map { TraktSyncShow(ids(it)) })) })
         }
 
-        // Shows in progress: un-mark everything after the current position, in case the user moved back.
-        val inProgress = shows.filter { it.tracking.status == WatchStatus.WATCHING && it.tracking.currentSeason > 0 }
-        if (inProgress.isNotEmpty()) {
-            api.removeFromHistory(
-                TraktSyncBody(
-                    emptyList(),
-                    inProgress.map { s ->
-                        TraktSyncShow(ids(s), seasons = episodesAfter(s.tracking.currentSeason, s.tracking.currentEpisode, s.details.seasonEpisodes).map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
-                    },
-                )
-            )
+        // History: completed movies not yet recorded, shows completed now, shows that moved forward.
+        val histMovies = movies.filter { it.tracking.status == WatchStatus.COMPLETED && pushedBefore(it) != WatchStatus.COMPLETED }
+        val histShows = shows.mapNotNull { s ->
+            val t = s.tracking
+            when {
+                t.status == WatchStatus.COMPLETED -> if (pushedBefore(s) != WatchStatus.COMPLETED) TraktSyncShow(ids(s)) else null // whole show
+                t.status == WatchStatus.WATCHING && t.currentSeason > 0 -> {
+                    val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.syncedSeason to t.syncedEpisode else 0 to 0
+                    val delta = episodesBetween(from.first, from.second, t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
+                    if (delta.isEmpty()) null else TraktSyncShow(ids(s), seasons = delta.map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
+                }
+                else -> null
+            }
         }
-
-        // History
-        val histMovies = movies.filter { it.tracking.status == WatchStatus.COMPLETED }
-        val histShows = shows.filter { it.tracking.status == WatchStatus.COMPLETED || (it.tracking.status == WatchStatus.WATCHING && it.tracking.currentSeason > 0) }
         if (histMovies.isNotEmpty() || histShows.isNotEmpty()) {
-            api.addToHistory(
-                TraktSyncBody(
-                    histMovies.map { TraktSyncMovie(ids(it)) },
-                    histShows.map { s ->
-                        val seasons = if (s.tracking.status == WatchStatus.COMPLETED) null
-                        else episodesUpTo(s.tracking.currentSeason, s.tracking.currentEpisode, s.details.seasonEpisodes)
-                            .map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) }
-                        TraktSyncShow(ids(s), seasons = seasons)
-                    },
-                )
-            )
+            collect(post { api.addToHistory(TraktSyncBody(histMovies.map { TraktSyncMovie(ids(it)) }, histShows)) })
         }
 
-        toPush.forEach { library.markSynced(it.localId, trakt = true, simkl = false) }
-        return removed + toPush.size
+        // Shows that moved back (still watching): un-mark what is after the new position. Never an empty list,
+        // which Trakt would read as "the whole show".
+        val movedBack = shows.mapNotNull { s ->
+            val t = s.tracking
+            if (t.status != WatchStatus.WATCHING || pushedBefore(s) == null) return@mapNotNull null
+            val wasAhead = pushedBefore(s) == WatchStatus.COMPLETED || t.syncedSeason > t.currentSeason || (t.syncedSeason == t.currentSeason && t.syncedEpisode > t.currentEpisode)
+            if (!wasAhead) return@mapNotNull null
+            val after = episodesAfter(t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
+            if (after.isEmpty()) null else TraktSyncShow(ids(s), seasons = after.map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
+        }
+        if (movedBack.isNotEmpty()) collect(post { api.removeFromHistory(TraktSyncBody(emptyList(), movedBack)) })
+
+        // Titles Trakt could not resolve stay unsynced (and are never reconciled away).
+        var pushed = 0
+        for (item in toPush) {
+            if (notFound.any { it.matches(item) }) { Log.w(TAG, "Trakt does not know ${item.details.title}, left unsynced"); continue }
+            library.markSynced(item.localId, trakt = true, simkl = false, at = snapshotAt, pushed = item.tracking)
+            pushed++
+        }
+        return removed + pushed
+    }
+
+    companion object {
+        private const val POST_INTERVAL_MS = 1100L
     }
 }

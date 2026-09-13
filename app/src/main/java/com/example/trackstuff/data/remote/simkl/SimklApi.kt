@@ -67,7 +67,7 @@ data class SimklAllItems(
 data class SimklEpisodeRef(val number: Int)
 
 @JsonClass(generateAdapter = true)
-data class SimklSeasonRef(val number: Int, val episodes: List<SimklEpisodeRef> = emptyList())
+data class SimklSeasonRef(val number: Int, val episodes: List<SimklEpisodeRef>? = null)
 
 @JsonClass(generateAdapter = true)
 data class SimklSyncItem(

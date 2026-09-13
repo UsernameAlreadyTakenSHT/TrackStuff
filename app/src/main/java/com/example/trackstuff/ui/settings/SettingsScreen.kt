@@ -129,14 +129,14 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 Field(stringResource(R.string.settings_tvdb_pin), f.tvdbPin, { v -> vm.edit { it.copy(tvdbPin = v) } })
 
                 SubTitle("omdb.org", "https://www.omdb.org")
-                state.omdbOrgInfo.let { i -> LocalDatasetBlock(stringResource(R.string.settings_omdborg_hint), i.titleCount, i.lastImportAt, i.nextAllowedAt, i.canDownload, importState, onImport = vm::importOmdbOrg, onCancel = vm::cancelOmdbOrgImport) }
+                state.omdbOrgInfo.let { i -> LocalDatasetBlock(stringResource(R.string.settings_omdborg_hint) + (if (i.incomplete) "\n" + stringResource(R.string.settings_import_interrupted) else ""), i.titleCount, i.lastImportAt, i.nextAllowedAt, i.canDownload, importState, onImport = vm::importOmdbOrg, onCancel = vm::cancelOmdbOrgImport) }
 
                 SubTitle("IMDb", "https://datasets.imdbws.com/")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = !f.imdbFullDatasets, onClick = { vm.edit { it.copy(imdbFullDatasets = false) } }, label = { Text(stringResource(R.string.settings_imdb_standard)) })
                     FilterChip(selected = f.imdbFullDatasets, onClick = { vm.edit { it.copy(imdbFullDatasets = true) } }, label = { Text(stringResource(R.string.settings_imdb_full)) })
                 }
-                state.imdbInfo.let { i -> LocalDatasetBlock(stringResource(if (f.imdbFullDatasets) R.string.settings_imdb_hint_full else R.string.settings_imdb_hint) + (if (i.formatOutdated) "\n" + stringResource(R.string.settings_imdb_outdated) else ""), i.titleCount, i.lastImportAt, i.nextAllowedAt, i.canDownload, imdbImportState, onImport = vm::importImdb, onCancel = vm::cancelImdbImport) }
+                state.imdbInfo.let { i -> LocalDatasetBlock(stringResource(if (f.imdbFullDatasets) R.string.settings_imdb_hint_full else R.string.settings_imdb_hint) + (if (i.formatOutdated) "\n" + stringResource(R.string.settings_imdb_outdated) else "") + (if (i.incomplete) "\n" + stringResource(R.string.settings_import_interrupted) else ""), i.titleCount, i.lastImportAt, i.nextAllowedAt, i.canDownload, imdbImportState, onImport = vm::importImdb, onCancel = vm::cancelImdbImport) }
             }
 
             Section(stringResource(R.string.settings_ratings), stringResource(R.string.settings_ratings_hint)) {
