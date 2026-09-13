@@ -1,5 +1,6 @@
 package com.example.trackstuff.ui.detail
 
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.ui.text.style.TextOverflow
@@ -174,6 +175,8 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
                     KindBadge(d.kind)
                     d.status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically)) }
+                    // Genres on the same line as the type and status.
+                    if (d.genres.isNotEmpty()) Text("· " + d.genres.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically))
                 }
                 // Ratings via OMDb: IMDb (audience), Tomatometer and Metascore (critics); the chips open the sites.
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -183,9 +186,6 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                     MiniRating("MC", r.metacritic?.toString(), d.metacriticUrl, Color(0xFF66CC33).let { if (isDark()) it else Color(0xFF2E7D32) })
                 }
             }
-        }
-        if (d.genres.isNotEmpty()) {
-            Text(d.genres.joinToString(" · "), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
         if (refreshing) Text(stringResource(R.string.detail_updating), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp))
 
@@ -383,7 +383,8 @@ private fun ProvidersSection(p: WatchProviders) {
         Modifier.fillMaxWidth().clickable(enabled = p.link != null) { p.link?.let { openUrl(context, it) } }.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(stringResource(R.string.detail_watch, p.region), style = MaterialTheme.typography.labelLarge)
+        Icon(Icons.Default.Tv, contentDescription = stringResource(R.string.detail_watch, p.region), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        Text(p.region, style = MaterialTheme.typography.labelLarge)
         ProviderGroup(stringResource(R.string.watch_stream), p.stream)
         ProviderGroup(stringResource(R.string.watch_free), p.free)
         ProviderGroup(stringResource(R.string.watch_rent), p.rent)
