@@ -1,6 +1,9 @@
 package com.example.trackstuff.ui.navigation
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
@@ -102,7 +105,9 @@ fun AppNavigation() {
     Column(Modifier.fillMaxSize()) {
         NavDisplay(
             backStack = backStack,
-            modifier = Modifier.weight(1f),
+            // The tab bar below already sits above the system navigation bar: screens must not pad for it too
+            // (that padding showed as a blank strip above the tabs).
+            modifier = Modifier.weight(1f).then(if (showBar) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier),
             onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
             entryDecorators = listOf(
                 rememberSaveableStateHolderNavEntryDecorator(),
