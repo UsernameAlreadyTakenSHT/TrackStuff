@@ -175,9 +175,9 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
                     KindBadge(d.kind)
                     d.status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically)) }
-                    // Genres on the same line as the type and status.
-                    if (d.genres.isNotEmpty()) Text("· " + d.genres.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically))
                 }
+                // Genres on their own line, under the type and status.
+                if (d.genres.isNotEmpty()) Text(d.genres.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                 // Ratings via OMDb: IMDb (audience), Tomatometer and Metascore (critics); the chips open the sites.
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
                     val r = d.ratings
