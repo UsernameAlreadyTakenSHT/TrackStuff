@@ -9,6 +9,7 @@ import com.example.trackstuff.domain.MediaDetails
 import com.example.trackstuff.domain.MediaKind
 import com.example.trackstuff.domain.UserTracking
 import com.example.trackstuff.domain.WatchStatus
+import com.example.trackstuff.domain.advanced
 import com.example.trackstuff.domain.fillMissingFrom
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -67,6 +68,13 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
         val t = transform(item.tracking).copy(updatedAt = System.currentTimeMillis())
         dao.update(MediaEntity.from(item.details, t, localId, e.needsEnrichment))
         onLocalChange?.invoke()
+    }
+
+    /** One more episode watched ("+1" on a library card): see [advanced]. */
+    suspend fun advance(localId: Long) {
+        val e = dao.getById(localId) ?: return
+        val seasons = e.toLibraryItem().details.seasonEpisodes
+        updateTracking(localId) { it.advanced(seasons) }
     }
 
     suspend fun updateDetails(localId: Long, details: MediaDetails, needsEnrichment: Boolean = false) {

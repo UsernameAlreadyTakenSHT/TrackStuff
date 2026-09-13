@@ -74,6 +74,7 @@ import com.example.trackstuff.ui.components.KindBadge
 import com.example.trackstuff.ui.components.PosterImage
 import com.example.trackstuff.ui.components.RatingChip
 import com.example.trackstuff.ui.components.formatScore
+import com.example.trackstuff.ui.components.formatDate
 import com.example.trackstuff.ui.components.openUrl
 import com.example.trackstuff.ui.components.statusColor
 
@@ -338,9 +339,3 @@ private fun CreditLine(label: String, value: String) {
     }
 }
 
-/** "1997-12-19" → "19 Dec 1997" (localized); null when the date is missing or incomplete. */
-private fun formatDate(iso: String?): String? = iso?.takeIf { it.length == 10 }?.let {
-    runCatching {
-        java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()))
-    }.getOrNull()
-}

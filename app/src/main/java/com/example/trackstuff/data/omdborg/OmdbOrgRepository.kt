@@ -1,5 +1,6 @@
 package com.example.trackstuff.data.omdborg
 
+import com.example.trackstuff.data.remote.describeError
 import android.content.Context
 import android.util.Log
 import com.example.trackstuff.data.local.OmdbAliasEntity
@@ -93,7 +94,7 @@ class OmdbOrgRepository(
                 _state.value = OmdbImportState.Idle
             } catch (e: Exception) {
                 Log.e(TAG, "Import failed", e)
-                _state.value = OmdbImportState.Error(e.message ?: e.toString())
+                _state.value = OmdbImportState.Error(describeError(e))
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.example.trackstuff.data.sync
 
+import com.example.trackstuff.data.remote.describeError
 import android.util.Log
 import com.example.trackstuff.data.remote.trakt.TraktApi
 import com.example.trackstuff.data.remote.trakt.TraktDeviceCodeRequest
@@ -121,15 +122,15 @@ class TraktSyncService(
             // Local ids seen in the Trakt lists: anything synced before but no longer there was removed on Trakt.
             val present = HashSet<Long>()
             var complete = true
-            try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present) } catch (e: Exception) { complete = false; errors += "Watchlist: ${e.message}"; Log.w(TAG, e) }
-            try { pulled += pullWatched(api.watchedMovies(), isShow = false, present) } catch (e: Exception) { complete = false; errors += "Watched movies: ${e.message}"; Log.w(TAG, e) }
-            try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present) } catch (e: Exception) { complete = false; errors += "Watched shows: ${e.message}"; Log.w(TAG, e) }
+            try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present) } catch (e: Exception) { complete = false; errors += "Watchlist: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatched(api.watchedMovies(), isShow = false, present) } catch (e: Exception) { complete = false; errors += "Watched movies: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present) } catch (e: Exception) { complete = false; errors += "Watched shows: ${describeError(e)}"; Log.w(TAG, e) }
             // No reconciliation on the first pull after (re)connecting: nothing local has been pushed there yet.
             if (complete && since.isNotBlank()) pulled += reconcileRemovals(present)
         }
 
         // ---- Push
-        try { pushed = pushLocal(api) } catch (e: Exception) { errors += "Push: ${e.message}"; Log.w(TAG, e) }
+        try { pushed = pushLocal(api) } catch (e: Exception) { errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
 
         // Resume point: the timestamp after our pushes, so our own changes are not read back.
         if (errors.isEmpty()) try {

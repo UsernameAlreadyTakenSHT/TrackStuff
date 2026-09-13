@@ -8,6 +8,7 @@ import com.example.trackstuff.data.remote.tmdb.TmdbTv
 import com.example.trackstuff.data.remote.trakt.TraktEntry
 import com.example.trackstuff.data.repository.MetadataRepository
 import com.example.trackstuff.domain.MediaKind
+import com.example.trackstuff.domain.advanced
 import com.example.trackstuff.domain.guessKind
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -194,5 +195,44 @@ class DiscoverProblemTest {
         assertTrue(r.isConfigProblem("TMDB: API key not set"))
         assertTrue(r.isConfigProblem("omdb.org: database not imported (Settings)"))
         assertFalse(r.isConfigProblem("TVDB: Unable to resolve host"))
+    }
+}
+
+class ProgressTest {
+    private val seasons = listOf(3, 2)
+
+    @Test
+    fun `next episode moves within and across seasons, none after the last known`() {
+        val t = com.example.trackstuff.domain.UserTracking(status = com.example.trackstuff.domain.WatchStatus.WATCHING, currentSeason = 1, currentEpisode = 2)
+        assertEquals("S1E3", com.example.trackstuff.domain.nextEpisode(t, seasons)?.label)
+        assertEquals("S2E1", com.example.trackstuff.domain.nextEpisode(t.copy(currentEpisode = 3), seasons)?.label)
+        assertNull(com.example.trackstuff.domain.nextEpisode(t.copy(currentSeason = 2, currentEpisode = 2), seasons))
+        assertNull(com.example.trackstuff.domain.nextEpisode(t.copy(status = com.example.trackstuff.domain.WatchStatus.COMPLETED), seasons))
+        // Unknown episode counts: open-ended season, starts at S1E1 from nothing.
+        assertEquals("S1E1", com.example.trackstuff.domain.nextEpisode(com.example.trackstuff.domain.UserTracking(), emptyList())?.label)
+        assertEquals("S3E8", com.example.trackstuff.domain.nextEpisode(t.copy(currentSeason = 3, currentEpisode = 7), emptyList())?.label)
+    }
+
+    @Test
+    fun `advancing completes the series after the last known episode`() {
+        val t = com.example.trackstuff.domain.UserTracking(currentSeason = 2, currentEpisode = 1, status = com.example.trackstuff.domain.WatchStatus.WATCHING)
+        val a = t.advanced(seasons)
+        assertEquals(com.example.trackstuff.domain.WatchStatus.WATCHING, a.status); assertEquals(2, a.currentEpisode)
+        val b = a.advanced(seasons)
+        assertEquals(com.example.trackstuff.domain.WatchStatus.COMPLETED, b.status); assertEquals(2, b.currentSeason); assertEquals(2, b.currentEpisode)
+        assertEquals(b, b.advanced(seasons))
+        val fresh = com.example.trackstuff.domain.UserTracking().advanced(seasons)
+        assertEquals(com.example.trackstuff.domain.WatchStatus.WATCHING, fresh.status); assertEquals(1, fresh.currentSeason); assertEquals(1, fresh.currentEpisode)
+    }
+}
+
+class DescribeErrorTest {
+    @Test
+    fun `network failures get short readable descriptions`() {
+        assertEquals("offline", com.example.trackstuff.data.remote.describeError(java.net.UnknownHostException("api.themoviedb.org")))
+        assertEquals("timed out", com.example.trackstuff.data.remote.describeError(java.net.SocketTimeoutException("read")))
+        val r = retrofit2.Response.error<Any>(401, okhttp3.ResponseBody.create(null, ""))
+        assertEquals("invalid key or sign-in expired", com.example.trackstuff.data.remote.describeError(retrofit2.HttpException(r)))
+        assertEquals("boom", com.example.trackstuff.data.remote.describeError(IllegalStateException("boom")))
     }
 }

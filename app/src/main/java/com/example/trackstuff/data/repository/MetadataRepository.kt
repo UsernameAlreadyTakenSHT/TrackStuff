@@ -32,11 +32,7 @@ import kotlinx.coroutines.awaitAll
 private const val TAG = "Metadata"
 
 /** Short user-facing message: "offline" instead of OkHttp's synthetic 504. */
-private fun errMsg(e: Exception): String = when {
-    e is retrofit2.HttpException && e.code() == 504 -> "offline"
-    e is java.net.UnknownHostException || e is java.net.ConnectException -> "offline"
-    else -> e.message ?: e.javaClass.simpleName
-}
+private fun errMsg(e: Exception): String = com.example.trackstuff.data.remote.describeError(e)
 
 data class SearchOutcome(
     val results: List<MediaSummary>,

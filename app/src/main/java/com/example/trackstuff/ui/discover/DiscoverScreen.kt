@@ -19,6 +19,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.trackstuff.R
 import com.example.trackstuff.data.repository.DiscoverSection
+import com.example.trackstuff.data.repository.MetadataRepository
 import com.example.trackstuff.data.repository.SectionMedia
 import com.example.trackstuff.domain.DataSource
 import com.example.trackstuff.domain.MediaSummary
@@ -46,7 +48,7 @@ private val SOURCES = listOf(DataSource.TMDB, DataSource.TVDB, DataSource.IMDB, 
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote: (MediaSummary) -> Unit) {
+fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote: (MediaSummary) -> Unit, onOpenSettings: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val libraryIndex by vm.libraryIndex.collectAsStateWithLifecycle()
     // Not delegated: the map is read inside each card, so a resolved poster redraws only the cards showing it.
@@ -110,11 +112,15 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
 
             when {
                 rows.isEmpty() && !state.loading -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        problem ?: stringResource(R.string.discover_nothing),
-                        textAlign = TextAlign.Center,
-                        color = if (problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            problem ?: stringResource(R.string.discover_nothing),
+                            textAlign = TextAlign.Center,
+                            color = if (problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // A missing key or dataset is fixed in Settings.
+                        if (problem != null && MetadataRepository.isConfigProblem(problem)) TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.setup_open_settings)) }
+                    }
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     rows.forEach { row ->

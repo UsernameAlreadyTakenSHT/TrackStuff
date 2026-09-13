@@ -1,5 +1,6 @@
 package com.example.trackstuff.ui.settings
 
+import com.example.trackstuff.data.remote.describeError
 import androidx.lifecycle.ViewModel
 import com.example.trackstuff.R
 import androidx.lifecycle.viewModelScope
@@ -100,7 +101,7 @@ class SettingsViewModel(
                 val json = backup.export()
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
                 R.string.backup_exported to null
-            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            } catch (e: Exception) { R.string.backup_failed to describeError(e) }
             _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
         }
     }
@@ -112,7 +113,7 @@ class SettingsViewModel(
                 val json = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Cannot open file") }
                 val r = backup.import(json)
                 R.string.backup_imported to "${r.added} / ${r.updated} / ${r.skipped}"
-            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            } catch (e: Exception) { R.string.backup_failed to describeError(e) }
             _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
         }
     }
@@ -124,7 +125,7 @@ class SettingsViewModel(
                 val json = settingsRepo.exportSettings()
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
                 R.string.settings_exported to null
-            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            } catch (e: Exception) { R.string.backup_failed to describeError(e) }
             _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
         }
     }
@@ -137,7 +138,7 @@ class SettingsViewModel(
                 settingsRepo.importSettings(json)
                 _state.update { it.copy(form = settingsRepo.current(), saved = true) }
                 R.string.settings_imported to null
-            } catch (e: Exception) { R.string.backup_failed to (e.message ?: "") }
+            } catch (e: Exception) { R.string.backup_failed to describeError(e) }
             _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
         }
     }

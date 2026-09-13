@@ -132,6 +132,9 @@ fun MediaCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    /** Optional quick action shown under the status (e.g. "+1" on a series in progress). */
+    action: (() -> Unit)? = null,
+    actionLabel: String? = null,
 ) {
     Column(modifier = modifier.clickable(onClick = onClick)) {
         PosterImage(posterUrl, title, Modifier.fillMaxWidth())
@@ -148,7 +151,12 @@ fun MediaCard(
         val meta = listOfNotNull(year?.toString(), subtitle).joinToString(" · ")
         Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis)
         // No category badge on cards (only on the page); the status stays visible in the library.
-        if (status != null) Row(modifier = Modifier.padding(top = 4.dp)) { StatusBadge(status) }
+        if (status != null || action != null) Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (status != null) StatusBadge(status)
+            if (action != null) Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable(onClick = action)) {
+                Text(actionLabel ?: "+1", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            }
+        }
     }
 }
 
@@ -168,6 +176,8 @@ data class RowItem(
     val onVisible: (() -> Unit)? = null,
     /** When [posterUrl] is null: key of a poster resolved later (see `PosterRow.posterFor`). */
     val posterKey: String? = null,
+    /** Quick action on the card (label given by the row). */
+    val action: (() -> Unit)? = null,
 )
 
 /**
@@ -175,7 +185,7 @@ data class RowItem(
  * whose URL was unknown when the row was built; it is read inside each card, so only that card redraws.
  */
 @Composable
-fun PosterRow(title: String, items: List<RowItem>, modifier: Modifier = Modifier, subtitle: String? = null, emptyText: String? = null, posterFor: ((String) -> String?)? = null) {
+fun PosterRow(title: String, items: List<RowItem>, modifier: Modifier = Modifier, subtitle: String? = null, emptyText: String? = null, posterFor: ((String) -> String?)? = null, actionLabel: String? = null) {
     Column(modifier) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -204,10 +214,19 @@ fun PosterRow(title: String, items: List<RowItem>, modifier: Modifier = Modifier
                         status = item.status,
                         subtitle = item.subtitle,
                         onClick = item.onClick,
+                        action = item.action,
+                        actionLabel = actionLabel,
                         modifier = Modifier.width(120.dp),
                     )
                 }
             }
         }
     }
+}
+
+/** ISO date (yyyy-MM-dd) in the phone's format, e.g. "20 Sep 2026"; null when the date is missing or malformed. */
+fun formatDate(iso: String?): String? = iso?.takeIf { it.length == 10 }?.let {
+    runCatching {
+        java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()))
+    }.getOrNull()
 }

@@ -87,8 +87,8 @@ fun AppNavigation() {
             ),
             entryProvider = entryProvider {
                 entry<LibraryKey> {
-                    val vm: LibraryViewModel = viewModel(factory = factory { LibraryViewModel(container.library) })
-                    LibraryScreen(vm, onOpen = { backStack.add(DetailKey.local(it)) })
+                    val vm: LibraryViewModel = viewModel(factory = factory { LibraryViewModel(container.library, container.settings, container.sync) })
+                    LibraryScreen(vm, onOpen = { backStack.add(DetailKey.local(it)) }, onOpenSettings = { switchTab(backStack, SettingsKey) })
                 }
                 entry<DiscoverKey> {
                     val vm: DiscoverViewModel = viewModel(factory = factory { DiscoverViewModel(container.metadata, container.library) })
@@ -96,6 +96,7 @@ fun AppNavigation() {
                         vm,
                         onOpenLocal = { backStack.add(DetailKey.local(it)) },
                         onOpenRemote = { backStack.add(DetailKey.remote(it)) },
+                        onOpenSettings = { switchTab(backStack, SettingsKey) },
                     )
                 }
                 entry<SearchKey> {
@@ -104,6 +105,7 @@ fun AppNavigation() {
                         vm,
                         onOpenLocal = { backStack.add(DetailKey.local(it)) },
                         onOpenRemote = { backStack.add(DetailKey.remote(it)) },
+                        onOpenSettings = { switchTab(backStack, SettingsKey) },
                     )
                 }
                 entry<SettingsKey> {

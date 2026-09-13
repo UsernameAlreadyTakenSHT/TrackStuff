@@ -27,6 +27,11 @@
     <string name="library_empty_start_none">Your library is empty: add titles from Discover or Search.</string>
     <string name="library_empty_start">Nothing planned.</string>
     <string name="library_empty_history">Nothing completed yet.</string>
+    <string name="library_upcoming">Upcoming</string>
+    <string name="library_next">Next: %s</string>
+    <string name="setup_hint">To find titles, add a TMDB or TVDB API key in Settings (free accounts).</string>
+    <string name="setup_open_settings">Open Settings</string>
+    <string name="sync_failed">%1$s sync failed: %2$s</string>
     <plurals name="library_count">
         <item quantity="one">%d title in the library</item>
         <item quantity="other">%d titles in the library</item>

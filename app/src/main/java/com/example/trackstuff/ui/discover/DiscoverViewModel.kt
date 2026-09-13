@@ -1,5 +1,6 @@
 package com.example.trackstuff.ui.discover
 
+import com.example.trackstuff.data.remote.describeError
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.trackstuff.data.repository.DiscoverSection
@@ -119,7 +120,7 @@ class DiscoverViewModel(private val metadata: MetadataRepository, library: Libra
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                com.example.trackstuff.data.repository.DiscoverOutcome(emptyList(), listOf(e.message ?: "Error"))
+                com.example.trackstuff.data.repository.DiscoverOutcome(emptyList(), listOf(describeError(e)))
             }
             // Without a TMDB key, switch to TVDB automatically.
             val available = outcome.sections.map { it.source }.distinct()

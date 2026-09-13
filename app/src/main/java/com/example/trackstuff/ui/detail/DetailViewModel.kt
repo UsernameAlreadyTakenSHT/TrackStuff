@@ -1,5 +1,6 @@
 package com.example.trackstuff.ui.detail
 
+import com.example.trackstuff.data.remote.describeError
 import androidx.lifecycle.ViewModel
 import com.example.trackstuff.R
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import com.example.trackstuff.domain.LibraryItem
 import com.example.trackstuff.domain.MediaDetails
 import com.example.trackstuff.domain.MediaKind
 import com.example.trackstuff.domain.WatchStatus
+import com.example.trackstuff.domain.advanced
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -75,7 +77,7 @@ class DetailViewModel(
                 val d = metadata.details(ids, isSeries, title, year)
                 _state.update { it.copy(loading = false, details = d) }
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message ?: "Error") }
+                _state.update { it.copy(loading = false, error = describeError(e)) }
             }
         }
     }
@@ -112,34 +114,16 @@ class DetailViewModel(
         }
     }
 
-    fun setRating(rating: Int?) = updateTracking { it.copy(userRating = rating) }
-    fun setNotes(notes: String) = updateTracking { it.copy(notes = notes) }
-
     /** Progress drives the status: something marked → watching, nothing marked → planned (a completed title stays completed until touched). */
     fun setProgress(season: Int, episode: Int) = updateTracking {
         val s = season.coerceAtLeast(0); val e = episode.coerceAtLeast(0)
         it.copy(currentSeason = s, currentEpisode = e, status = if (s > 0 || e > 0) WatchStatus.WATCHING else WatchStatus.PLANNED)
     }
 
-    /**
-     * Next episode. When the number of episodes per season is known, moves to the next season at the
-     * end of a season, and marks the series completed after the last episode.
-     */
+    /** Next episode: next season at the end of a season, completed after the last known episode (see [advanced]). */
     fun nextEpisode() {
-        val item = _state.value.item ?: return
-        val t = item.tracking
-        val seasons = item.details.seasonEpisodes
-        var s = if (t.currentSeason == 0) 1 else t.currentSeason
-        var e = t.currentEpisode + 1
-        val inSeason = seasons.getOrNull(s - 1)
-        if (inSeason != null && e > inSeason) {
-            if (s >= seasons.size) {
-                updateTracking { it.copy(currentSeason = s, currentEpisode = inSeason, status = WatchStatus.COMPLETED) }
-                return
-            }
-            s += 1; e = 1
-        }
-        setProgress(s, e)
+        val seasons = _state.value.item?.details?.seasonEpisodes.orEmpty()
+        updateTracking { it.advanced(seasons) }
     }
 
     fun setKind(kind: MediaKind) {
@@ -159,7 +143,7 @@ class DetailViewModel(
                 library.refresh(id)
                 _state.update { it.copy(refreshing = false, message = DetailMessage(R.string.detail_updated)) }
             } catch (e: Exception) {
-                _state.update { it.copy(refreshing = false, message = DetailMessage(R.string.detail_update_failed, arg = e.message ?: "")) }
+                _state.update { it.copy(refreshing = false, message = DetailMessage(R.string.detail_update_failed, arg = describeError(e))) }
             }
         }
     }

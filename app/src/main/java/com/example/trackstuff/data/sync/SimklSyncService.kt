@@ -1,5 +1,6 @@
 package com.example.trackstuff.data.sync
 
+import com.example.trackstuff.data.remote.describeError
 import android.util.Log
 import com.example.trackstuff.data.remote.simkl.SimklApi
 import com.example.trackstuff.data.remote.simkl.SimklEpisodeRef
@@ -112,9 +113,9 @@ class SimklSyncService(
                 if (activities.removedStamp != tokens.simklRemovedStamp) pulled += reconcileRemovals(api)
             }
             pullOk = true
-        } catch (e: Exception) { errors += "Pull: ${e.message}"; Log.w(TAG, e) }
+        } catch (e: Exception) { errors += "Pull: ${describeError(e)}"; Log.w(TAG, e) }
 
-        try { pushed = push(api) } catch (e: Exception) { errors += "Push: ${e.message}"; Log.w(TAG, e) }
+        try { pushed = push(api) } catch (e: Exception) { errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
 
         // Resume point for the next sync: the `all` timestamp after our pushes (our own changes will not be
         // downloaded again). A still-empty account has no timestamp: use the current time.

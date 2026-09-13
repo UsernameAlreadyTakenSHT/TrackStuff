@@ -1,5 +1,6 @@
 package com.example.trackstuff.data.sync
 
+import com.example.trackstuff.data.remote.describeError
 import android.util.Log
 import com.example.trackstuff.data.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +29,12 @@ data class SyncState(
     val lastResults: Map<SyncService, String> = emptyMap(),
     /** Code-based sign-in in progress or finished (survives navigation between tabs). */
     val auth: AuthProgress? = null,
+    /** Last sync that failed, wholly or partly, shown once outside Settings (library snackbar). */
+    val lastFailure: SyncFailure? = null,
 )
+
+/** A failed or partial sync: which service, what went wrong, when. */
+data class SyncFailure(val service: SyncService, val message: String, val at: Long)
 
 /**
  * Orchestrates Trakt / Simkl syncs, automatic and manual:
@@ -114,7 +120,7 @@ class SyncCoordinator(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(auth = AuthProgress(service, error = e.message ?: "error")) }
+                _state.update { it.copy(auth = AuthProgress(service, error = describeError(e))) }
             }
         }
     }
@@ -143,10 +149,11 @@ class SyncCoordinator(
     /** Sync of a single service ("Sync" button). */
     suspend fun sync(service: SyncService): String = mutex.withLock {
         _state.update { it.copy(running = service) }
+        var failure: String? = null
         val msg = try {
             pulling = true
             val report = when (service) { SyncService.TRAKT -> trakt.sync(); SyncService.SIMKL -> simkl.sync() }
-            if (report.errors.isNotEmpty()) retryPending = true
+            if (report.errors.isNotEmpty()) { retryPending = true; failure = report.errors.first() }
             report.summary(service.label)
         } catch (e: kotlinx.coroutines.CancellationException) {
             _state.update { it.copy(running = null) }
@@ -154,12 +161,13 @@ class SyncCoordinator(
         } catch (e: Exception) {
             Log.w(TAG, "${service.label} sync failed", e)
             retryPending = true
-            "${service.label}: ${e.message}"
+            failure = describeError(e)
+            "${service.label}: ${describeError(e)}"
         } finally {
             pulling = false
         }
         settingsRepo.saveLastSyncAt(System.currentTimeMillis())
-        _state.update { it.copy(running = null, lastResults = it.lastResults + (service to msg)) }
+        _state.update { it.copy(running = null, lastResults = it.lastResults + (service to msg), lastFailure = failure?.let { f -> SyncFailure(service, f, System.currentTimeMillis()) } ?: it.lastFailure) }
         msg
     }
 

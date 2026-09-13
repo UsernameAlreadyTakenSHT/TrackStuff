@@ -1,5 +1,6 @@
 package com.example.trackstuff.ui.search
 
+import com.example.trackstuff.data.remote.describeError
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.trackstuff.data.repository.LibraryRepository
@@ -52,7 +53,7 @@ class SearchViewModel(private val metadata: MetadataRepository, private val libr
             val outcome = try {
                 metadata.search(q)
             } catch (e: Exception) {
-                com.example.trackstuff.data.repository.SearchOutcome(emptyList(), null, listOf(e.message ?: "Error"))
+                com.example.trackstuff.data.repository.SearchOutcome(emptyList(), null, listOf(describeError(e)))
             }
             val inLib = outcome.results.mapNotNull { r -> library.findExisting(r.ids, r.isSeries)?.let { r to it.localId } }.toMap()
             _state.update { it.copy(results = outcome.results, source = outcome.source, problems = outcome.problems, loading = false, inLibrary = inLib, searched = true) }

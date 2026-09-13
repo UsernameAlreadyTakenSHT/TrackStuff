@@ -23,6 +23,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.example.trackstuff.data.repository.MetadataRepository
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,7 +42,7 @@ import com.example.trackstuff.ui.components.MediaCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(vm: SearchViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote: (MediaSummary) -> Unit) {
+fun SearchScreen(vm: SearchViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote: (MediaSummary) -> Unit, onOpenSettings: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -76,6 +78,8 @@ fun SearchScreen(vm: SearchViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote:
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
+                // A missing key or dataset is fixed in Settings.
+                if (state.problems.any { MetadataRepository.isConfigProblem(it) }) TextButton(onClick = onOpenSettings, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.setup_open_settings)) }
             }
 
             when {
