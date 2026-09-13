@@ -148,8 +148,6 @@ data class MediaDetails(
 /** What the user entered for a title in their library. */
 data class UserTracking(
     val status: WatchStatus = WatchStatus.PLANNED,
-    val userRating: Int? = null,
-    val notes: String = "",
     val currentSeason: Int = 0,
     val currentEpisode: Int = 0,
     val addedAt: Long = System.currentTimeMillis(),

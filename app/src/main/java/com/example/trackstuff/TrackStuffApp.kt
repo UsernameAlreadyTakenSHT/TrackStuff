@@ -40,11 +40,14 @@ class TrackStuffApp : Application(), coil.ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        // The HTTP cache must exist before the first request; synchronous (fast) read of the chosen size.
-        val cacheMb = kotlinx.coroutines.runBlocking { container.settings.current().httpCacheMb }
-        Network.init(this, cacheMb)
-        // Explicit-refresh limits survive restarts.
-        com.example.trackstuff.data.remote.RefreshLimiter.load(kotlinx.coroutines.runBlocking { container.settings.refreshLimits() })
+        // The HTTP cache must exist before the first request: created with the default size, then resized in
+        // place once the settings are read (no blocking read of the preference files on the main thread).
+        Network.init(this, Network.DEFAULT_CACHE_MB)
+        container.appScope.launch {
+            Network.setCacheSize(container.settings.current().httpCacheMb)
+            // Explicit-refresh limits survive restarts (merged, in case one was acquired meanwhile).
+            com.example.trackstuff.data.remote.RefreshLimiter.load(container.settings.refreshLimits())
+        }
         com.example.trackstuff.data.remote.RefreshLimiter.persist = { map -> container.appScope.launch { container.settings.saveRefreshLimits(map) } }
         // Retry a sync that failed offline as soon as the network is back.
         val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager

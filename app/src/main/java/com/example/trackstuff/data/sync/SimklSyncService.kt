@@ -194,7 +194,6 @@ class SimklSyncService(
             if (existing == null) {
                 val tracking = UserTracking(
                     status = status,
-                    userRating = it.userRating,
                     currentSeason = progress?.first ?: 0,
                     currentEpisode = progress?.second ?: 0,
                     lastSyncedSimkl = now,
@@ -206,7 +205,6 @@ class SimklSyncService(
                 library.updateTracking(existing.localId) { t ->
                     t.copy(
                         status = status,
-                        userRating = it.userRating ?: t.userRating,
                         currentSeason = progress?.first ?: t.currentSeason,
                         currentEpisode = progress?.second ?: t.currentEpisode,
                     )

@@ -232,7 +232,7 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
             d.imdbUrl?.let { LinkChip("IMDb", it) }
             d.tmdbUrl?.let { LinkChip("TMDB", it) }
             d.ids.tvdbId?.let { LinkChip("TVDB", "https://thetvdb.com/dereferrer/${if (d.isSeries) "series" else "movie"}/$it") }
-            d.omdbOrgUrl?.let { LinkChip("OMDB", it) }
+            d.omdbOrgUrl?.let { LinkChip("omdb.org", it) }
         }
         Spacer(Modifier.height(32.dp))
     }

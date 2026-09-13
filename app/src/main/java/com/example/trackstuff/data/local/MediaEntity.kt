@@ -70,8 +70,6 @@ data class MediaEntity(
     val seasonEpisodes: List<Int>,
     // User tracking
     val status: WatchStatus,
-    val userRating: Int?,
-    val notes: String,
     val currentSeason: Int,
     val currentEpisode: Int,
     val addedAt: Long,
@@ -117,8 +115,6 @@ data class MediaEntity(
         ),
         tracking = UserTracking(
             status = status,
-            userRating = userRating,
-            notes = notes,
             currentSeason = currentSeason,
             currentEpisode = currentEpisode,
             addedAt = addedAt,
@@ -175,8 +171,6 @@ data class MediaEntity(
             nextAired = details.nextAired,
             seasonEpisodes = details.seasonEpisodes,
             status = tracking.status,
-            userRating = tracking.userRating,
-            notes = tracking.notes,
             currentSeason = tracking.currentSeason,
             currentEpisode = tracking.currentEpisode,
             addedAt = tracking.addedAt,
