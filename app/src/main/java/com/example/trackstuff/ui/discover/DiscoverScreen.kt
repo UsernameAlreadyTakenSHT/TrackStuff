@@ -48,6 +48,9 @@ private val SOURCES = listOf(DataSource.TMDB, DataSource.TVDB, DataSource.IMDB, 
 @Composable
 fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote: (MediaSummary) -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val libraryIndex by vm.libraryIndex.collectAsStateWithLifecycle()
+    // Not delegated: the map is read inside each card, so a resolved poster redraws only the cards showing it.
+    val posters = vm.posters.collectAsStateWithLifecycle()
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     val waitText = state.refreshWaitMinutes?.let { stringResource(R.string.refresh_wait, it.toString()) }
     androidx.compose.runtime.LaunchedEffect(waitText) {
@@ -77,11 +80,36 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
             }
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
 
-            val sections = state.sections.filter { it.source == state.source }.mapNotNull { it.applyFilter(state.media) }
+            val inLibraryText = stringResource(R.string.in_library)
+            // Rows are built once per data change, not on every recomposition (hundreds of cards).
+            val rows = remember(state.sections, state.source, state.media, libraryIndex) {
+                state.sections.filter { it.source == state.source }.mapNotNull { it.applyFilter(state.media) }.map { section ->
+                    DiscoverRow(
+                        key = "${section.source.name}-${section.media.name}-${section.title}",
+                        title = section.title,
+                        items = section.items.mapIndexed { index, r ->
+                            val localId = libraryIndex.localIdOf(r)
+                            RowItem(
+                                key = "${r.source}-${r.ids.tmdbId ?: r.ids.tvdbId ?: r.ids.imdbId ?: r.ids.omdbOrgId ?: r.title}-${r.isSeries}-$index",
+                                title = r.title,
+                                year = r.year,
+                                posterUrl = r.posterUrl,
+                                posterKey = if (r.posterUrl == null) r.ids.imdbId else null,
+                                onVisible = if (r.posterUrl == null) ({ vm.ensurePoster(r) }) else null,
+                                // No category badge in Discover: the type is already chosen by the toggle.
+                                kind = null,
+                                status = null,
+                                subtitle = if (localId != null) inLibraryText else null,
+                                onClick = { if (localId != null) onOpenLocal(localId) else onOpenRemote(r) },
+                            )
+                        },
+                    )
+                }
+            }
             val problem = state.problems.firstOrNull { it.startsWith(state.source.label) }
 
             when {
-                sections.isEmpty() && !state.loading -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                rows.isEmpty() && !state.loading -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Text(
                         problem ?: stringResource(R.string.discover_nothing),
                         textAlign = TextAlign.Center,
@@ -89,26 +117,9 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
                     )
                 }
                 else -> LazyColumn(contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    sections.forEach { section ->
-                        item(key = "${section.source.name}-${section.media.name}-${section.title}") {
-                            PosterRow(
-                                title = section.title,
-                                items = section.items.mapIndexed { index, r ->
-                                    val localId = state.inLibrary[r]
-                                    RowItem(
-                                        key = "${r.source}-${r.ids.tmdbId ?: r.ids.tvdbId ?: r.ids.imdbId ?: r.ids.omdbOrgId ?: r.title}-${r.isSeries}-$index",
-                                        title = r.title,
-                                        year = r.year,
-                                        posterUrl = r.posterUrl ?: r.ids.imdbId?.let { state.posters[it] },
-                                        onVisible = if (r.posterUrl == null) ({ vm.ensurePoster(r) }) else null,
-                                        // No category badge in Discover: the type is already chosen by the toggle.
-                                        kind = null,
-                                        status = null,
-                                        subtitle = if (localId != null) stringResource(R.string.in_library) else null,
-                                        onClick = { if (localId != null) onOpenLocal(localId) else onOpenRemote(r) },
-                                    )
-                                },
-                            )
+                    rows.forEach { row ->
+                        item(key = row.key) {
+                            PosterRow(title = row.title, items = row.items, posterFor = { key -> posters.value[key] })
                         }
                     }
                 }
@@ -116,6 +127,9 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
         }
     }
 }
+
+/** One Discover row, ready to draw. */
+private data class DiscoverRow(val key: String, val title: String, val items: List<RowItem>)
 
 /** Movies or Series: hides rows of the other type, filters mixed rows (trending). */
 private fun DiscoverSection.applyFilter(filter: MediaFilter): DiscoverSection? = when (filter) {

@@ -64,6 +64,7 @@ fun PosterImage(url: String?, title: String, modifier: Modifier = Modifier, corn
 
 /** Opens a URL in the browser (or the associated app, e.g. IMDb). */
 fun openUrl(context: android.content.Context, url: String) {
+    if (!url.startsWith("https://") && !url.startsWith("http://")) return
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
@@ -165,11 +166,16 @@ data class RowItem(
     val onClick: () -> Unit,
     /** Called when the card enters composition (e.g. to fetch a missing poster). */
     val onVisible: (() -> Unit)? = null,
+    /** When [posterUrl] is null: key of a poster resolved later (see `PosterRow.posterFor`). */
+    val posterKey: String? = null,
 )
 
-/** Horizontal poster row with a section title (library, Discover). */
+/**
+ * Horizontal poster row with a section title (library, Discover). [posterFor] resolves the poster of an item
+ * whose URL was unknown when the row was built; it is read inside each card, so only that card redraws.
+ */
 @Composable
-fun PosterRow(title: String, items: List<RowItem>, modifier: Modifier = Modifier, subtitle: String? = null, emptyText: String? = null) {
+fun PosterRow(title: String, items: List<RowItem>, modifier: Modifier = Modifier, subtitle: String? = null, emptyText: String? = null, posterFor: ((String) -> String?)? = null) {
     Column(modifier) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -193,7 +199,7 @@ fun PosterRow(title: String, items: List<RowItem>, modifier: Modifier = Modifier
                     MediaCard(
                         title = item.title,
                         year = item.year,
-                        posterUrl = item.posterUrl,
+                        posterUrl = item.posterUrl ?: item.posterKey?.let { k -> posterFor?.invoke(k) },
                         kind = item.kind,
                         status = item.status,
                         subtitle = item.subtitle,

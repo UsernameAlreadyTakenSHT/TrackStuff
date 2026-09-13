@@ -2,7 +2,8 @@
 <!--
     Android auto backup (API < 31): only the user's library and settings. The large imported datasets
     (IMDb, omdb.org) and the HTTP cache are left out — they can be downloaded again and would exceed
-    the 25 MB backup quota, which would make the whole backup fail.
+    the 25 MB backup quota, which would make the whole backup fail. API keys and sign-in tokens are kept in
+    files/secrets/, outside these rules: they never leave the phone (use the settings export instead).
 -->
 <full-backup-content>
     <include domain="database" path="trackstuff.db"/>

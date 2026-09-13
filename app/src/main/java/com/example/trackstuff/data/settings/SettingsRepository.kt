@@ -19,6 +19,46 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() },
 )
 
+/**
+ * Secrets (API keys, client secrets, sign-in tokens) live in their own file, outside `datastore/`, so that
+ * the Android cloud backup and device transfer leave them out (see backup_rules.xml). Values saved by earlier
+ * versions in the settings file are moved over once, at the first access.
+ */
+private object SecretStore {
+    private const val FILE = "secrets/secrets.preferences_pb"
+    @Volatile private var instance: DataStore<Preferences>? = null
+
+    fun get(context: Context): DataStore<Preferences> = instance ?: synchronized(this) {
+        instance ?: androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+            corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() },
+            migrations = listOf(MoveSecretsMigration(context.applicationContext)),
+            produceFile = { java.io.File(context.applicationContext.filesDir, FILE) },
+        ).also { instance = it }
+    }
+}
+
+/** One-time move of the secret keys from the settings file to the secrets file. */
+private class MoveSecretsMigration(private val context: Context) : androidx.datastore.core.DataMigration<Preferences> {
+    private suspend fun leftovers(): Preferences = context.dataStore.data.first()
+
+    override suspend fun shouldMigrate(currentData: Preferences): Boolean = leftovers().asMap().keys.any { it in SECRET_KEYS }
+
+    @Suppress("UNCHECKED_CAST")
+    override suspend fun migrate(currentData: Preferences): Preferences {
+        val old = leftovers()
+        val m = currentData.toMutablePreferences()
+        for (k in SECRET_KEYS) {
+            val v = old[k] ?: continue
+            if (!m.contains(k)) m[k as Preferences.Key<Any>] = v
+        }
+        return m
+    }
+
+    override suspend fun cleanUp() {
+        context.dataStore.edit { p -> SECRET_KEYS.forEach { p.remove(it) } }
+    }
+}
+
 private fun String?.orDefault(default: String): String = if (isNullOrBlank()) default else this
 
 /** Default page language: the phone's (e.g. fr-FR, en-US). */
@@ -54,7 +94,7 @@ data class AppSettings(
     val hasSimkl get() = simklClientId.isNotBlank() && simklClientSecret.isNotBlank()
 }
 
-/** Jetons d'authentification obtenus dynamiquement (TVDB, Trakt, Simkl). */
+/** Tokens obtained at run time (TVDB, Trakt, Simkl) and sync / import bookkeeping. */
 data class AuthTokens(
     val tvdbToken: String = "",
     val tvdbTokenExpiresAt: Long = 0,
@@ -84,68 +124,76 @@ data class AuthTokens(
     val simklConnected get() = simklAccessToken.isNotBlank()
 }
 
+/** Preference keys. Those in [SECRET_KEYS] are stored in the secrets file, the others in the settings file. */
+private object Keys {
+    val TMDB = stringPreferencesKey("tmdb_api_key")
+    val TVDB = stringPreferencesKey("tvdb_api_key")
+    val TVDB_PIN = stringPreferencesKey("tvdb_pin")
+    val OMDB = stringPreferencesKey("omdb_api_key")
+    val LANGUAGE = stringPreferencesKey("language")
+    val REGION = stringPreferencesKey("region")
+    val TRAKT_ID = stringPreferencesKey("trakt_client_id")
+    val TRAKT_SECRET = stringPreferencesKey("trakt_client_secret")
+    val SIMKL_ID = stringPreferencesKey("simkl_client_id")
+    val SIMKL_SECRET = stringPreferencesKey("simkl_client_secret")
+    val HTTP_CACHE_MB = intPreferencesKey("http_cache_mb")
+    val IMDB_FULL = androidx.datastore.preferences.core.booleanPreferencesKey("imdb_full_datasets")
+
+    val TVDB_TOKEN = stringPreferencesKey("tvdb_token")
+    val TVDB_TOKEN_EXP = longPreferencesKey("tvdb_token_exp")
+    val TRAKT_ACCESS = stringPreferencesKey("trakt_access")
+    val TRAKT_REFRESH = stringPreferencesKey("trakt_refresh")
+    val TRAKT_EXP = longPreferencesKey("trakt_exp")
+    val SIMKL_ACCESS = stringPreferencesKey("simkl_access")
+    val SIMKL_ACTIVITIES = stringPreferencesKey("simkl_activities")
+    val TRAKT_ACTIVITIES = stringPreferencesKey("trakt_activities")
+    val SIMKL_REMOVED = stringPreferencesKey("simkl_removed_stamp")
+    val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
+    val SYNC_PRIMARY = stringPreferencesKey("sync_primary")
+    val PENDING_REMOVALS = stringPreferencesKey("pending_removals")
+    val REFRESH_LIMITS = stringPreferencesKey("refresh_limits")
+    val OMDB_ORG_IMPORTED_AT = longPreferencesKey("omdb_org_imported_at")
+    val IMDB_IMPORTED_AT = longPreferencesKey("imdb_imported_at")
+    val IMDB_FORMAT = androidx.datastore.preferences.core.intPreferencesKey("imdb_format_version")
+    val IMDB_INCOMPLETE = androidx.datastore.preferences.core.booleanPreferencesKey("imdb_incomplete")
+    val OMDB_ORG_INCOMPLETE = androidx.datastore.preferences.core.booleanPreferencesKey("omdb_org_incomplete")
+}
+
+private val SECRET_KEYS: Set<Preferences.Key<*>> = setOf(
+    Keys.TMDB, Keys.TVDB, Keys.TVDB_PIN, Keys.OMDB, Keys.TRAKT_ID, Keys.TRAKT_SECRET, Keys.SIMKL_ID, Keys.SIMKL_SECRET,
+    Keys.TVDB_TOKEN, Keys.TVDB_TOKEN_EXP, Keys.TRAKT_ACCESS, Keys.TRAKT_REFRESH, Keys.TRAKT_EXP, Keys.SIMKL_ACCESS,
+)
+
 class SettingsRepository(private val context: Context) {
-    private object Keys {
-        val TMDB = stringPreferencesKey("tmdb_api_key")
-        val TVDB = stringPreferencesKey("tvdb_api_key")
-        val TVDB_PIN = stringPreferencesKey("tvdb_pin")
-        val OMDB = stringPreferencesKey("omdb_api_key")
-        val LANGUAGE = stringPreferencesKey("language")
-        val REGION = stringPreferencesKey("region")
-        val TRAKT_ID = stringPreferencesKey("trakt_client_id")
-        val TRAKT_SECRET = stringPreferencesKey("trakt_client_secret")
-        val SIMKL_ID = stringPreferencesKey("simkl_client_id")
-        val SIMKL_SECRET = stringPreferencesKey("simkl_client_secret")
-        val HTTP_CACHE_MB = intPreferencesKey("http_cache_mb")
-        val IMDB_FULL = androidx.datastore.preferences.core.booleanPreferencesKey("imdb_full_datasets")
+    private val secrets: DataStore<Preferences> get() = SecretStore.get(context)
 
-        val TVDB_TOKEN = stringPreferencesKey("tvdb_token")
-        val TVDB_TOKEN_EXP = longPreferencesKey("tvdb_token_exp")
-        val TRAKT_ACCESS = stringPreferencesKey("trakt_access")
-        val TRAKT_REFRESH = stringPreferencesKey("trakt_refresh")
-        val TRAKT_EXP = longPreferencesKey("trakt_exp")
-        val SIMKL_ACCESS = stringPreferencesKey("simkl_access")
-        val SIMKL_ACTIVITIES = stringPreferencesKey("simkl_activities")
-        val TRAKT_ACTIVITIES = stringPreferencesKey("trakt_activities")
-        val SIMKL_REMOVED = stringPreferencesKey("simkl_removed_stamp")
-        val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
-        val SYNC_PRIMARY = stringPreferencesKey("sync_primary")
-        val PENDING_REMOVALS = stringPreferencesKey("pending_removals")
-        val REFRESH_LIMITS = stringPreferencesKey("refresh_limits")
-        val OMDB_ORG_IMPORTED_AT = longPreferencesKey("omdb_org_imported_at")
-        val IMDB_IMPORTED_AT = longPreferencesKey("imdb_imported_at")
-        val IMDB_FORMAT = androidx.datastore.preferences.core.intPreferencesKey("imdb_format_version")
-        val IMDB_INCOMPLETE = androidx.datastore.preferences.core.booleanPreferencesKey("imdb_incomplete")
-        val OMDB_ORG_INCOMPLETE = androidx.datastore.preferences.core.booleanPreferencesKey("omdb_org_incomplete")
-    }
-
-    val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
+    val settings: Flow<AppSettings> = kotlinx.coroutines.flow.combine(context.dataStore.data, secrets.data) { p, sec ->
         AppSettings(
             // An empty field in the app falls back to the local.properties value (BuildConfig).
-            tmdbApiKey = p[Keys.TMDB].orDefault(BuildConfig.TMDB_API_KEY),
-            tvdbApiKey = p[Keys.TVDB].orDefault(BuildConfig.TVDB_API_KEY),
-            tvdbPin = p[Keys.TVDB_PIN] ?: "",
-            omdbApiKey = p[Keys.OMDB].orDefault(BuildConfig.OMDB_API_KEY),
+            tmdbApiKey = sec[Keys.TMDB].orDefault(BuildConfig.TMDB_API_KEY),
+            tvdbApiKey = sec[Keys.TVDB].orDefault(BuildConfig.TVDB_API_KEY),
+            tvdbPin = sec[Keys.TVDB_PIN] ?: "",
+            omdbApiKey = sec[Keys.OMDB].orDefault(BuildConfig.OMDB_API_KEY),
             language = p[Keys.LANGUAGE].orDefault(defaultLanguage()),
             region = p[Keys.REGION].orDefault(defaultRegion()),
-            traktClientId = p[Keys.TRAKT_ID].orDefault(BuildConfig.TRAKT_CLIENT_ID),
-            traktClientSecret = p[Keys.TRAKT_SECRET].orDefault(BuildConfig.TRAKT_CLIENT_SECRET),
-            simklClientId = p[Keys.SIMKL_ID].orDefault(BuildConfig.SIMKL_CLIENT_ID),
-            simklClientSecret = p[Keys.SIMKL_SECRET].orDefault(BuildConfig.SIMKL_CLIENT_SECRET),
+            traktClientId = sec[Keys.TRAKT_ID].orDefault(BuildConfig.TRAKT_CLIENT_ID),
+            traktClientSecret = sec[Keys.TRAKT_SECRET].orDefault(BuildConfig.TRAKT_CLIENT_SECRET),
+            simklClientId = sec[Keys.SIMKL_ID].orDefault(BuildConfig.SIMKL_CLIENT_ID),
+            simklClientSecret = sec[Keys.SIMKL_SECRET].orDefault(BuildConfig.SIMKL_CLIENT_SECRET),
             httpCacheMb = p[Keys.HTTP_CACHE_MB] ?: com.example.trackstuff.data.remote.Network.DEFAULT_CACHE_MB,
             imdbFullDatasets = p[Keys.IMDB_FULL] ?: false,
             syncPrimary = p[Keys.SYNC_PRIMARY] ?: "trakt",
         )
     }
 
-    val tokens: Flow<AuthTokens> = context.dataStore.data.map { p ->
+    val tokens: Flow<AuthTokens> = kotlinx.coroutines.flow.combine(context.dataStore.data, secrets.data) { p, sec ->
         AuthTokens(
-            tvdbToken = p[Keys.TVDB_TOKEN] ?: "",
-            tvdbTokenExpiresAt = p[Keys.TVDB_TOKEN_EXP] ?: 0,
-            traktAccessToken = p[Keys.TRAKT_ACCESS] ?: "",
-            traktRefreshToken = p[Keys.TRAKT_REFRESH] ?: "",
-            traktExpiresAt = p[Keys.TRAKT_EXP] ?: 0,
-            simklAccessToken = p[Keys.SIMKL_ACCESS] ?: "",
+            tvdbToken = sec[Keys.TVDB_TOKEN] ?: "",
+            tvdbTokenExpiresAt = sec[Keys.TVDB_TOKEN_EXP] ?: 0,
+            traktAccessToken = sec[Keys.TRAKT_ACCESS] ?: "",
+            traktRefreshToken = sec[Keys.TRAKT_REFRESH] ?: "",
+            traktExpiresAt = sec[Keys.TRAKT_EXP] ?: 0,
+            simklAccessToken = sec[Keys.SIMKL_ACCESS] ?: "",
             simklActivitiesAt = p[Keys.SIMKL_ACTIVITIES] ?: "",
             traktActivitiesAt = p[Keys.TRAKT_ACTIVITIES] ?: "",
             simklRemovedStamp = p[Keys.SIMKL_REMOVED] ?: "",
@@ -162,17 +210,19 @@ class SettingsRepository(private val context: Context) {
     suspend fun currentTokens(): AuthTokens = tokens.first()
 
     suspend fun save(s: AppSettings) {
-        context.dataStore.edit { p ->
+        secrets.edit { p ->
             p[Keys.TMDB] = s.tmdbApiKey.trim()
             p[Keys.TVDB] = s.tvdbApiKey.trim()
             p[Keys.TVDB_PIN] = s.tvdbPin.trim()
             p[Keys.OMDB] = s.omdbApiKey.trim()
-            p[Keys.LANGUAGE] = s.language.trim()
-            p[Keys.REGION] = s.region.trim().uppercase()
             p[Keys.TRAKT_ID] = s.traktClientId.trim()
             p[Keys.TRAKT_SECRET] = s.traktClientSecret.trim()
             p[Keys.SIMKL_ID] = s.simklClientId.trim()
             p[Keys.SIMKL_SECRET] = s.simklClientSecret.trim()
+        }
+        context.dataStore.edit { p ->
+            p[Keys.LANGUAGE] = s.language.trim()
+            p[Keys.REGION] = s.region.trim().uppercase()
             p[Keys.HTTP_CACHE_MB] = s.httpCacheMb
             p[Keys.IMDB_FULL] = s.imdbFullDatasets
             p[Keys.SYNC_PRIMARY] = s.syncPrimary
@@ -181,7 +231,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun saveTvdbToken(token: String, expiresAt: Long) {
-        context.dataStore.edit { p -> p[Keys.TVDB_TOKEN] = token; p[Keys.TVDB_TOKEN_EXP] = expiresAt }
+        secrets.edit { p -> p[Keys.TVDB_TOKEN] = token; p[Keys.TVDB_TOKEN_EXP] = expiresAt }
     }
 
     // ---- Settings backup (keys, sync credentials, sign-in tokens, preferences)
@@ -200,11 +250,12 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun saveTraktTokens(access: String, refresh: String, expiresAt: Long) {
-        context.dataStore.edit { p -> p[Keys.TRAKT_ACCESS] = access; p[Keys.TRAKT_REFRESH] = refresh; p[Keys.TRAKT_EXP] = expiresAt }
+        secrets.edit { p -> p[Keys.TRAKT_ACCESS] = access; p[Keys.TRAKT_REFRESH] = refresh; p[Keys.TRAKT_EXP] = expiresAt }
     }
 
     suspend fun clearTrakt() {
-        context.dataStore.edit { p -> p.remove(Keys.TRAKT_ACCESS); p.remove(Keys.TRAKT_REFRESH); p.remove(Keys.TRAKT_EXP); p.remove(Keys.TRAKT_ACTIVITIES) }
+        secrets.edit { p -> p.remove(Keys.TRAKT_ACCESS); p.remove(Keys.TRAKT_REFRESH); p.remove(Keys.TRAKT_EXP) }
+        context.dataStore.edit { p -> p.remove(Keys.TRAKT_ACTIVITIES) }
     }
 
     suspend fun saveTraktActivitiesAt(at: String) {
@@ -235,7 +286,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun saveSimklToken(access: String) {
-        context.dataStore.edit { p -> p[Keys.SIMKL_ACCESS] = access }
+        secrets.edit { p -> p[Keys.SIMKL_ACCESS] = access }
     }
 
     suspend fun saveSimklActivitiesAt(at: String, removedStamp: String) {
@@ -243,7 +294,8 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun clearSimkl() {
-        context.dataStore.edit { p -> p.remove(Keys.SIMKL_ACCESS); p.remove(Keys.SIMKL_ACTIVITIES); p.remove(Keys.SIMKL_REMOVED) }
+        secrets.edit { p -> p.remove(Keys.SIMKL_ACCESS) }
+        context.dataStore.edit { p -> p.remove(Keys.SIMKL_ACTIVITIES); p.remove(Keys.SIMKL_REMOVED) }
     }
 
     suspend fun saveOmdbOrgImportedAt(at: Long) {

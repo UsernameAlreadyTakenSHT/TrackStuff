@@ -88,8 +88,8 @@ class SettingsViewModel(
 
     // ------------------------------------------------------------------ Cache
 
-    fun clearCache() { Network.clearCache(); refreshCacheUsage() }
-    fun refreshCacheUsage() = _state.update { it.copy(cacheUsedBytes = Network.cacheSizeBytes()) }
+    fun clearCache() { viewModelScope.launch { Network.clearCache(); _state.update { it.copy(cacheUsedBytes = Network.cacheSizeBytes()) } } }
+    fun refreshCacheUsage() { viewModelScope.launch { _state.update { it.copy(cacheUsedBytes = Network.cacheSizeBytes()) } } }
 
     // ------------------------------------------------------------------ Library backup
 

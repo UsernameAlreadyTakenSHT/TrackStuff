@@ -12,6 +12,8 @@ import com.example.trackstuff.domain.guessKind
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -145,5 +147,52 @@ class TvdbImageUrlTest {
     fun `tvdb missing-image placeholder counts as no poster`() {
         assertNull(com.example.trackstuff.data.remote.tvdb.TvdbApi.imageUrl("https://artworks.thetvdb.com/banners/images/missing/series.jpg"))
         assertEquals("https://artworks.thetvdb.com/banners/posters/1.jpg", com.example.trackstuff.data.remote.tvdb.TvdbApi.imageUrl("posters/1.jpg"))
+    }
+}
+
+class TvdbThumbUrlTest {
+    @Test
+    fun `thumbnail inserts _t before the extension, once`() {
+        val api = com.example.trackstuff.data.remote.tvdb.TvdbApi
+        assertEquals("https://artworks.thetvdb.com/banners/v4/series/79655/posters/612fab2cf3cde_t.jpg", api.thumbUrl("https://artworks.thetvdb.com/banners/v4/series/79655/posters/612fab2cf3cde.jpg"))
+        assertEquals("https://artworks.thetvdb.com/banners/posters/276123-1_t.jpg", api.thumbUrl("posters/276123-1.jpg"))
+        assertEquals("https://artworks.thetvdb.com/banners/posters/276123-1_t.jpg", api.thumbUrl("posters/276123-1_t.jpg"))
+        assertNull(api.thumbUrl("https://artworks.thetvdb.com/banners/images/missing/series.jpg"))
+        assertNull(api.thumbUrl(null))
+    }
+}
+
+class LibraryIndexTest {
+    private fun item(localId: Long, ids: com.example.trackstuff.domain.ExternalIds, isSeries: Boolean) = com.example.trackstuff.domain.LibraryItem(
+        localId = localId,
+        details = com.example.trackstuff.domain.MediaDetails(
+            ids = ids, kind = if (isSeries) com.example.trackstuff.domain.MediaKind.SERIES else com.example.trackstuff.domain.MediaKind.MOVIE, isSeries = isSeries,
+            title = "t", originalTitle = null, year = null, overview = null, posterUrl = null, backdropUrl = null, genres = emptyList(), runtimeMinutes = null,
+            numberOfSeasons = null, numberOfEpisodes = null, ratings = com.example.trackstuff.domain.Ratings(), posterSource = null, overviewSource = null,
+        ),
+        tracking = com.example.trackstuff.domain.UserTracking(),
+    )
+
+    @Test
+    fun `matches by tmdb, imdb, tvdb with the media type, else nothing`() {
+        val ids = com.example.trackstuff.domain.ExternalIds(tmdbId = 1, imdbId = "tt1", tvdbId = 10)
+        val index = com.example.trackstuff.ui.discover.LibraryIndex.of(listOf(item(7, ids, isSeries = true), item(8, com.example.trackstuff.domain.ExternalIds(tmdbId = 1), isSeries = false)))
+        fun s(ids: com.example.trackstuff.domain.ExternalIds, series: Boolean) = com.example.trackstuff.domain.MediaSummary(ids = ids, isSeries = series, title = "t", source = com.example.trackstuff.domain.DataSource.TMDB)
+        assertEquals(7L, index.localIdOf(s(com.example.trackstuff.domain.ExternalIds(tmdbId = 1), true)))
+        assertEquals(8L, index.localIdOf(s(com.example.trackstuff.domain.ExternalIds(tmdbId = 1), false)))
+        assertEquals(7L, index.localIdOf(s(com.example.trackstuff.domain.ExternalIds(imdbId = "tt1"), false)))
+        assertEquals(7L, index.localIdOf(s(com.example.trackstuff.domain.ExternalIds(tvdbId = 10), true)))
+        assertNull(index.localIdOf(s(com.example.trackstuff.domain.ExternalIds(tvdbId = 10), false)))
+        assertNull(index.localIdOf(s(com.example.trackstuff.domain.ExternalIds(tmdbId = 2), true)))
+    }
+}
+
+class DiscoverProblemTest {
+    @Test
+    fun `configuration problems are told apart from transient errors`() {
+        val r = com.example.trackstuff.data.repository.MetadataRepository
+        assertTrue(r.isConfigProblem("TMDB: API key not set"))
+        assertTrue(r.isConfigProblem("omdb.org: database not imported (Settings)"))
+        assertFalse(r.isConfigProblem("TVDB: Unable to resolve host"))
     }
 }

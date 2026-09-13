@@ -98,14 +98,29 @@ interface ImdbDao {
     )
     suspend fun top(isSeries: Boolean, minVotes: Int, mean: Double, limit: Int): List<ImdbTitleEntity>
 
+    /**
+     * Titles (or aliases) starting with the query. [glob] is the normalized query followed by `*`: a GLOB
+     * with a bound, wildcard-free prefix uses the `nameNorm` indexes (a range scan), unlike `LIKE '%…%'`.
+     */
     @Query(
         """
-        SELECT * FROM imdb_title WHERE nameNorm LIKE '%' || :q || '%'
-            OR imdbId IN (SELECT tconst FROM imdb_alias WHERE nameNorm LIKE '%' || :q || '%')
+        SELECT * FROM imdb_title WHERE nameNorm GLOB :glob
+            OR imdbId IN (SELECT tconst FROM imdb_alias WHERE nameNorm GLOB :glob)
         ORDER BY votes DESC LIMIT :limit
         """
     )
-    suspend fun search(q: String, limit: Int = 40): List<ImdbTitleEntity>
+    suspend fun searchPrefix(glob: String, limit: Int): List<ImdbTitleEntity>
+
+    /** Titles (or aliases) containing the query anywhere: a full scan, used only when the prefix search finds little. */
+    @Query(
+        """
+        SELECT * FROM imdb_title WHERE (nameNorm LIKE '%' || :q || '%'
+            OR imdbId IN (SELECT tconst FROM imdb_alias WHERE nameNorm LIKE '%' || :q || '%'))
+            AND imdbId NOT IN (:exclude)
+        ORDER BY votes DESC LIMIT :limit
+        """
+    )
+    suspend fun searchContains(q: String, exclude: List<String>, limit: Int): List<ImdbTitleEntity>
 
     @Query("SELECT episodes FROM imdb_season WHERE seriesId = :seriesId AND season >= 1 ORDER BY season")
     suspend fun seasons(seriesId: String): List<Int>

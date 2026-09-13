@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -27,6 +28,8 @@ import com.example.trackstuff.ui.components.RowItem
 @Composable
 fun LibraryScreen(vm: LibraryViewModel, onOpen: (Long) -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Row items (with their click lambdas) are rebuilt only when the library changes.
+    val rows = remember(state) { LibraryRows(state.continueWatching.map { it.toRowItem(onOpen) }, state.startWatching.map { it.toRowItem(onOpen) }, state.history.map { it.toRowItem(onOpen) }) }
 
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.library_title)) }) }) { padding ->
         LazyColumn(
@@ -37,21 +40,21 @@ fun LibraryScreen(vm: LibraryViewModel, onOpen: (Long) -> Unit) {
             item(key = "continue") {
                 PosterRow(
                     title = stringResource(R.string.library_continue),
-                    items = state.continueWatching.map { it.toRowItem(onOpen) },
+                    items = rows.continueWatching,
                     emptyText = stringResource(R.string.library_empty_continue),
                 )
             }
             item(key = "start") {
                 PosterRow(
                     title = stringResource(R.string.library_start),
-                    items = state.startWatching.map { it.toRowItem(onOpen) },
+                    items = rows.startWatching,
                     emptyText = stringResource(if (state.total == 0) R.string.library_empty_start_none else R.string.library_empty_start),
                 )
             }
             item(key = "history") {
                 PosterRow(
                     title = stringResource(R.string.library_history),
-                    items = state.history.map { it.toRowItem(onOpen) },
+                    items = rows.history,
                     emptyText = stringResource(R.string.library_empty_history),
                 )
             }
@@ -66,6 +69,8 @@ fun LibraryScreen(vm: LibraryViewModel, onOpen: (Long) -> Unit) {
         }
     }
 }
+
+private class LibraryRows(val continueWatching: List<RowItem>, val startWatching: List<RowItem>, val history: List<RowItem>)
 
 private fun LibraryItem.toRowItem(onOpen: (Long) -> Unit): RowItem {
     val d = details

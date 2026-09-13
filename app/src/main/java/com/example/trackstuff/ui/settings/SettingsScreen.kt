@@ -235,6 +235,8 @@ private fun Field(
         },
         singleLine = true,
         visualTransformation = if (secret && value.isNotEmpty()) PasswordVisualTransformation() else VisualTransformation.None,
+        // Password type: no autocorrect, and the keyboard does not learn keys and secrets.
+        keyboardOptions = if (secret) androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password) else androidx.compose.foundation.text.KeyboardOptions.Default,
         modifier = modifier,
     )
 }

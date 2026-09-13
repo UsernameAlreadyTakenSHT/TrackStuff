@@ -92,11 +92,12 @@ object Network {
         }.onFailure { android.util.Log.w("Network", "Cache size: applied at next start-up", it) }
     }
 
-    /** Space currently used on disk, in bytes. */
-    fun cacheSizeBytes(): Long = runCatching { cache?.size() ?: 0L }.getOrDefault(0L)
+    /** Space currently used on disk, in bytes (reads the cache journal: IO dispatcher). */
+    suspend fun cacheSizeBytes(): Long = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { cache?.size() ?: 0L }.getOrDefault(0L) }
 
-    fun clearCache() {
+    suspend fun clearCache() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runCatching { cache?.evictAll() }
+        Unit
     }
 
     /**
@@ -118,8 +119,17 @@ object Network {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .apply {
-            if (BuildConfig.DEBUG) addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+            // Debug logging never prints keys: query-string keys are masked and auth headers redacted.
+            if (BuildConfig.DEBUG) addInterceptor(
+                HttpLoggingInterceptor { msg -> android.util.Log.d("OkHttp", msg.replace(SECRET_PARAMS, "$1***")) }.apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                    listOf("Authorization", "trakt-api-key", "simkl-api-key").forEach { redactHeader(it) }
+                },
+            )
         }
+
+    /** Query parameters carrying a key or a client id (TMDB, OMDb, Simkl). */
+    private val SECRET_PARAMS = Regex("([?&](?:api_?key|client_id|client_secret|access_token)=)[^&\\s]+", RegexOption.IGNORE_CASE)
 
     /** Cached hosts. Trakt and Simkl (sync, pairing) must stay fresh: never cached. */
     private val JSON_HOSTS = setOf("api.themoviedb.org", "api4.thetvdb.com", "www.omdbapi.com")
@@ -148,9 +158,10 @@ object Network {
     /**
      * Drops the cached responses whose URL matches [predicate], so that the next call hits the network.
      * Used by the explicit "refresh" actions; automatic loads always go through the cache.
+     * Walks the disk cache journal: runs on the IO dispatcher.
      */
-    fun evict(predicate: (String) -> Boolean) {
-        val cache = client.cache ?: return
+    suspend fun evict(predicate: (String) -> Boolean) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val cache = client.cache ?: return@withContext
         runCatching {
             val it = cache.urls()
             while (it.hasNext()) if (predicate(it.next())) it.remove()

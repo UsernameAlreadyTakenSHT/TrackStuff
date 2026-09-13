@@ -76,21 +76,35 @@ interface OmdbOrgDao {
     suspend fun byImdb(imdbId: String): OmdbTitleEntity?
 
     /**
-     * Search by title (main or alias). Exact matches, then titles starting with the query,
-     * are ranked first.
+     * Titles (or aliases) starting with the query; exact matches first. [glob] is the normalized query
+     * followed by `*`: a GLOB with a bound, wildcard-free prefix uses the `nameNorm` indexes, unlike `LIKE '%…%'`.
      */
+    @Query(
+        """
+        SELECT * FROM omdb_title WHERE id IN (
+            SELECT id FROM omdb_title WHERE nameNorm GLOB :glob
+            UNION
+            SELECT titleId FROM omdb_alias WHERE nameNorm GLOB :glob
+        )
+        ORDER BY (nameNorm = :q) DESC, (year IS NULL) ASC, year DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun searchPrefix(q: String, glob: String, limit: Int): List<OmdbTitleEntity>
+
+    /** Titles (or aliases) containing the query anywhere: a full scan, used only when the prefix search finds little. */
     @Query(
         """
         SELECT * FROM omdb_title WHERE id IN (
             SELECT id FROM omdb_title WHERE nameNorm LIKE '%' || :q || '%'
             UNION
             SELECT titleId FROM omdb_alias WHERE nameNorm LIKE '%' || :q || '%'
-        )
-        ORDER BY (nameNorm = :q) DESC, (nameNorm LIKE :q || '%') DESC, (year IS NULL) ASC, year DESC
+        ) AND id NOT IN (:exclude)
+        ORDER BY (year IS NULL) ASC, year DESC
         LIMIT :limit
         """
     )
-    suspend fun search(q: String, limit: Int = 40): List<OmdbTitleEntity>
+    suspend fun searchContains(q: String, exclude: List<Int>, limit: Int): List<OmdbTitleEntity>
 
     /** Exact title (or exact alias), optionally filtered by year ±1 and by type. */
     @Query(

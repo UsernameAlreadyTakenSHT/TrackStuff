@@ -193,6 +193,15 @@ interface TvdbApi {
             else -> "https://artworks.thetvdb.com" + (if (path.startsWith("/")) path else "/banners/$path")
         }
 
+        /**
+         * Thumbnail of a TVDB artwork (`…_t.jpg`, about a third of the full size), for cards and rows.
+         * TVDB generates it for every poster; the detail page keeps the full image.
+         */
+        fun thumbUrl(path: String?): String? = imageUrl(path)?.let { url ->
+            val dot = url.lastIndexOf('.')
+            if (dot > url.lastIndexOf('/') && !url.substring(0, dot).endsWith("_t")) url.substring(0, dot) + "_t" + url.substring(dot) else url
+        }
+
         /** Converts a TMDB language code (fr-FR) into the 3-letter TVDB code (fra). */
         fun lang3(language: String): String = when (language.substringBefore('-').lowercase()) {
             "fr" -> "fra"; "en" -> "eng"; "de" -> "deu"; "es" -> "spa"; "it" -> "ita"; "pt" -> "por"

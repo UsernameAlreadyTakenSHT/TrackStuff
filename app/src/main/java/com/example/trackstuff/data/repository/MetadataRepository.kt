@@ -187,24 +187,30 @@ class MetadataRepository(
 
     // ------------------------------------------------------------------ Discover (popular / trending)
 
-    /**
-     * Rows of the Discover screen. Each source is independent: a missing key or a network error
-     * simply drops the row and adds a message.
-     */
     /** Last Discover result, kept in memory so that returning to the tab is instant (the HTTP cache still avoids network). */
-    @Volatile private var discoverMemo: Pair<Long, DiscoverOutcome>? = null
+    private class DiscoverMemo(val at: Long, val fingerprint: String, val outcome: DiscoverOutcome) {
+        /** A missing key or dataset is a stable state; a network error is retried sooner. */
+        val ttl: Long get() = if (outcome.problems.all { isConfigProblem(it) }) DISCOVER_MEMO_MS else DISCOVER_RETRY_MS
+    }
+    @Volatile private var discoverMemo: DiscoverMemo? = null
+
+    /** What the Discover rows depend on besides the charts themselves: keys, language, imported datasets. */
+    private suspend fun discoverFingerprint(s: com.example.trackstuff.data.settings.AppSettings): String =
+        listOf(s.hasTmdb, s.hasTvdb, s.hasOmdb, s.language, imdb.isAvailable(), omdbOrg.isAvailable()).joinToString("|")
 
     /**
      * Rows of the Discover screen. [force] (explicit refresh) drops the cached list responses first so the
-     * charts are re-fetched; otherwise a result under [DISCOVER_MEMO_MS] old is returned as is.
+     * charts are re-fetched; otherwise a recent result for the same configuration is returned as is.
      */
     suspend fun discover(force: Boolean = false): DiscoverOutcome {
+        val fingerprint = discoverFingerprint(settingsRepo.current())
         val memo = discoverMemo
-        if (!force && memo != null && System.currentTimeMillis() - memo.first < DISCOVER_MEMO_MS && memo.second.problems.isEmpty()) return memo.second
+        if (!force && memo != null && memo.fingerprint == fingerprint && System.currentTimeMillis() - memo.at < memo.ttl) return memo.outcome
         if (force && com.example.trackstuff.data.remote.RefreshLimiter.tryAcquire("discover")) com.example.trackstuff.data.remote.Network.evict { url -> LIST_URL_MARKERS.any { it in url } }
-        return discoverNow().also { discoverMemo = System.currentTimeMillis() to it }
+        return discoverNow().also { discoverMemo = DiscoverMemo(System.currentTimeMillis(), fingerprint, it) }
     }
 
+    /** Each source is independent: a missing key or a network error simply drops its rows and adds a message. */
     private suspend fun discoverNow(): DiscoverOutcome {
         val s = settingsRepo.current()
         val sections = mutableListOf<DiscoverSection>()
@@ -299,7 +305,7 @@ class MetadataRepository(
         title = name ?: "?",
         year = year?.toIntOrNull(),
         overview = overview,
-        posterUrl = TvdbApi.imageUrl(image),
+        posterUrl = TvdbApi.thumbUrl(image),
         source = DataSource.TVDB,
         kindHint = guessKind(isSeries, emptyList(), emptyList(), listOfNotNull(originalCountry), originalLanguage),
     )
@@ -321,7 +327,7 @@ class MetadataRepository(
             val hits = tvdb(s)?.byRemoteId(imdbId)?.data
             if (hits != null) answered = true
             val rec = hits?.firstNotNullOfOrNull { if (isSeries) it.series else it.movie } ?: hits?.firstNotNullOfOrNull { it.series ?: it.movie }
-            url = TvdbApi.imageUrl(rec?.image)
+            url = TvdbApi.thumbUrl(rec?.image)
         } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TVDB poster lookup failed: ${errMsg(e)}") }
         if (url != null || answered) runCatching { imdb.savePoster(imdbId, url) }
         return url
@@ -543,7 +549,7 @@ class MetadataRepository(
             originalTitle = name,
             year = year?.toIntOrNull(),
             overview = overviews[l3] ?: overviews["eng"] ?: overview,
-            posterUrl = TvdbApi.imageUrl(imageUrl),
+            posterUrl = TvdbApi.thumbUrl(imageUrl),
             source = DataSource.TVDB,
             kindHint = guessKind(series, emptyList(), genres, listOfNotNull(country), primaryLanguage),
         )
@@ -714,6 +720,10 @@ class MetadataRepository(
         const val TMDB_PAGES = ROW_SIZE / 20 + 2
         /** Discover rows are kept in memory this long; the HTTP cache (24 h) covers the rest. */
         const val DISCOVER_MEMO_MS = 60 * 60 * 1000L
+        /** Memo lifetime when a source failed for a non-configuration reason (network, server). */
+        const val DISCOVER_RETRY_MS = 5 * 60 * 1000L
+        /** Problems that only change when the user edits Settings (as opposed to network or server errors). */
+        fun isConfigProblem(p: String) = "not set" in p || "not imported" in p
         /** URL fragments of the chart endpoints, evicted from the HTTP cache on an explicit refresh. */
         private val LIST_URL_MARKERS = listOf("/trending/", "/popular", "/now_playing", "/on_the_air", "/filter")
 
