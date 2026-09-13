@@ -86,6 +86,10 @@
     <string name="detail_ratings">Ratings</string>
     <string name="detail_ratings_hint">No ratings available for this title. Ratings come from the OMDb API (key in Settings); the chips open the sites.</string>
     <string name="detail_credits">Credits</string>
+    <string name="detail_info">Info</string>
+    <string name="info_country">Country</string>
+    <string name="info_seasons">Seasons</string>
+    <string name="info_episodes">Episodes</string>
     <string name="credit_director">Director</string>
     <string name="credit_creator">Created by</string>
     <string name="credit_writer">Writer</string>

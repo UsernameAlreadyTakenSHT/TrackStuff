@@ -167,12 +167,9 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 val meta = listOfNotNull(
                     formatDate(d.releaseDate) ?: d.year?.toString(),
                     d.runtimeMinutes?.let { if (d.isSeries) stringResource(R.string.detail_min_per_episode, it) else "${it / 60}h${(it % 60).toString().padStart(2, '0')}" },
-                    d.numberOfSeasons?.let { pluralStringResource(R.plurals.detail_seasons, it, it) },
-                    d.numberOfEpisodes?.let { stringResource(R.string.detail_episodes, it) },
                     d.certification,
                 ).joinToString(" · ")
                 Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (d.countries.isNotEmpty()) Text(d.countries.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 d.nextAired?.let { next -> formatDate(next)?.let { Text(stringResource(R.string.detail_next_episode, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) } }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     KindBadge(d.kind)
@@ -217,6 +214,20 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
+
+        // ---- Info: country, seasons and episodes (kept out of the header to leave it airy)
+        val info = listOfNotNull(
+            d.countries.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.info_country) to it.joinToString(", ") },
+            d.numberOfSeasons?.let { stringResource(R.string.info_seasons) to it.toString() },
+            d.numberOfEpisodes?.let { stringResource(R.string.info_episodes) to it.toString() },
+        )
+        if (info.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            SectionTitle(stringResource(R.string.detail_info))
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                info.forEach { (label, value) -> CreditLine(label, value) }
+            }
+        }
 
         // ---- Credits
         val c = d.credits
