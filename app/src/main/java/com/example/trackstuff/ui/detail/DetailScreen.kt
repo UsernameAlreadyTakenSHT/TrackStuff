@@ -83,7 +83,6 @@ import com.example.trackstuff.domain.MediaKind
 import com.example.trackstuff.domain.WatchStatus
 import com.example.trackstuff.ui.components.KindBadge
 import com.example.trackstuff.ui.components.PosterImage
-import com.example.trackstuff.ui.components.RatingChip
 import com.example.trackstuff.ui.components.formatScore
 import com.example.trackstuff.ui.components.formatDate
 import com.example.trackstuff.ui.components.openUrl
@@ -176,6 +175,13 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                     KindBadge(d.kind)
                     d.status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically)) }
                 }
+                // Ratings via OMDb: IMDb (audience), Tomatometer and Metascore (critics); the chips open the sites.
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    val r = d.ratings
+                    MiniRating("IMDb", formatScore(r.imdb), d.imdbUrl, Color(0xFFF5C518).let { if (isDark()) it else Color(0xFFB8860B) })
+                    MiniRating("RT", r.rottenTomatoes?.let { "$it %" }, d.rottenTomatoesUrl, Color(0xFFFA320A))
+                    MiniRating("MC", r.metacritic?.toString(), d.metacriticUrl, Color(0xFF66CC33).let { if (isDark()) it else Color(0xFF2E7D32) })
+                }
             }
         }
         if (d.genres.isNotEmpty()) {
@@ -195,31 +201,21 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
             if (open) EpisodesSection(episodes, null, onPick = null)
         }
 
+        // ---- Where to watch (TMDB / JustWatch, user's region): one line
+        if (providers != null && !providers.isEmpty) {
+            Spacer(Modifier.height(8.dp))
+            ProvidersSection(providers)
+        }
+
         HorizontalDivider(Modifier.padding(vertical = 12.dp))
 
-        // ---- Where to watch (TMDB / JustWatch, user's region)
-        if (providers != null && !providers.isEmpty) {
-            ProvidersSection(providers)
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-        }
-
-        // ---- External ratings
-        SectionTitle(stringResource(R.string.detail_ratings))
-        // Via OMDb: IMDb (audience), Tomatometer and Metascore (critics). No RT / Metacritic audience scores in the API.
-        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val r = d.ratings
-            RatingChip("IMDb", formatScore(r.imdb), d.imdbUrl, Color(0xFFF5C518).let { if (isDark()) it else Color(0xFFB8860B) }, Modifier.weight(1f))
-            RatingChip("Rotten Tomatoes", r.rottenTomatoes?.let { "$it %" }, d.rottenTomatoesUrl, Color(0xFFFA320A), Modifier.weight(1f))
-            RatingChip("Metacritic", r.metacritic?.toString(), d.metacriticUrl, Color(0xFF66CC33).let { if (isDark()) it else Color(0xFF2E7D32) }, Modifier.weight(1f))
-        }
-        if (d.ratings.imdb == null && d.ratings.rottenTomatoes == null && d.ratings.metacritic == null) {
-            Text(
-                stringResource(R.string.detail_ratings_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-        }
+        // ---- Description
+        SectionTitle(stringResource(R.string.detail_synopsis))
+        Text(
+            d.overview ?: stringResource(R.string.detail_no_overview),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
 
         // ---- Credits
         val c = d.credits
@@ -234,15 +230,6 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 if (c.cast.isNotEmpty()) CreditLine(stringResource(R.string.credit_cast), c.cast.joinToString(", ") { m -> m.character?.let { "${m.name} ($it)" } ?: m.name })
             }
         }
-
-        // ---- Description
-        Spacer(Modifier.height(12.dp))
-        SectionTitle(stringResource(R.string.detail_synopsis))
-        Text(
-            d.overview ?: stringResource(R.string.detail_no_overview),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
         val sources = listOfNotNull(
             d.posterSource?.let { stringResource(R.string.source_poster, it.label) },
             d.overviewSource?.let { stringResource(R.string.source_overview, it.label) },
@@ -307,7 +294,7 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel, episodes: Li
     val t = item.tracking
     val d = item.details
 
-    SectionTitle(stringResource(R.string.detail_tracking))
+    // No section title: the status chips speak for themselves (compact block).
     // Status: planned / watching / completed. Watching is shown for series only and follows the progress
     // (first episode marked), it cannot be picked by hand.
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -391,28 +378,28 @@ private fun CreditLine(label: String, value: String) {
 @Composable
 private fun ProvidersSection(p: WatchProviders) {
     val context = LocalContext.current
-    SectionTitle(stringResource(R.string.detail_watch, p.region))
-    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ProviderLine(stringResource(R.string.watch_stream), p.stream, p.link)
-        ProviderLine(stringResource(R.string.watch_free), p.free, p.link)
-        ProviderLine(stringResource(R.string.watch_rent), p.rent, p.link)
-        ProviderLine(stringResource(R.string.watch_buy), p.buy, p.link)
+    // "Where to watch (FR)  Stream [N] [P]  Rent [A] [G]" on one scrolling line; everything opens JustWatch.
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = p.link != null) { p.link?.let { openUrl(context, it) } }.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(stringResource(R.string.detail_watch, p.region), style = MaterialTheme.typography.labelLarge)
+        ProviderGroup(stringResource(R.string.watch_stream), p.stream)
+        ProviderGroup(stringResource(R.string.watch_free), p.free)
+        ProviderGroup(stringResource(R.string.watch_rent), p.rent)
+        ProviderGroup(stringResource(R.string.watch_buy), p.buy)
     }
-    Text(stringResource(R.string.watch_source), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).clickable(enabled = p.link != null) { p.link?.let { openUrl(context, it) } })
 }
 
 @Composable
-private fun ProviderLine(label: String, providers: List<WatchProvider>, link: String?) {
+private fun ProviderGroup(label: String, providers: List<WatchProvider>) {
     if (providers.isEmpty()) return
-    val context = LocalContext.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
-        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            providers.forEach { pr ->
-                Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable(enabled = link != null) { link?.let { openUrl(context, it) } }, contentAlignment = Alignment.Center) {
-                    if (pr.logoUrl != null) AsyncImage(model = pr.logoUrl, contentDescription = pr.name, modifier = Modifier.fillMaxSize())
-                    else Text(pr.name.take(2), style = MaterialTheme.typography.labelSmall)
-                }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 2.dp))
+        providers.forEach { pr ->
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                if (pr.logoUrl != null) AsyncImage(model = pr.logoUrl, contentDescription = pr.name, modifier = Modifier.fillMaxSize())
+                else Text(pr.name.take(2), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -465,5 +452,17 @@ private fun ExpandHeader(text: String, open: Boolean, onToggle: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Small rating chip for the header column: value in colour, source underneath. */
+@Composable
+private fun MiniRating(label: String, value: String?, url: String?, color: Color) {
+    val context = LocalContext.current
+    Surface(shape = RoundedCornerShape(8.dp), color = color.copy(alpha = 0.15f), modifier = if (url != null) Modifier.clickable { openUrl(context, url) } else Modifier) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value ?: "—", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
