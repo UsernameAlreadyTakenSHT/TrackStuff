@@ -90,7 +90,6 @@
     <string name="info_country">Country</string>
     <string name="info_seasons">Seasons</string>
     <string name="info_episodes">Episodes</string>
-    <string name="info_episode_length">Episode length</string>
     <string name="info_rating">Age rating</string>
     <string name="credit_director">Director</string>
     <string name="credit_creator">Created by</string>

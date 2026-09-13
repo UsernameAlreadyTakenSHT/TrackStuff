@@ -220,7 +220,6 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
             d.countries.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.info_country) to it.joinToString(", ") },
             d.numberOfSeasons?.let { stringResource(R.string.info_seasons) to it.toString() },
             d.numberOfEpisodes?.let { stringResource(R.string.info_episodes) to it.toString() },
-            d.runtimeMinutes?.takeIf { d.isSeries }?.let { stringResource(R.string.info_episode_length) to stringResource(R.string.detail_min_per_episode, it) },
             d.certification?.let { stringResource(R.string.info_rating) to it },
         )
         if (info.isNotEmpty()) {
