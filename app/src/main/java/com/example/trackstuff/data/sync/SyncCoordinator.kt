@@ -70,6 +70,12 @@ class SyncCoordinator(
         scope.launch { syncAll() }
     }
 
+    /** Manual sync (pull-to-refresh on the library): runs now, and counts as the foreground sync. */
+    fun syncNow() {
+        lastForegroundAt = System.currentTimeMillis()
+        scope.launch { syncAll() }
+    }
+
     /** Called after every local tracking change (status, progress, addition, removal). */
     fun onLocalChange() {
         if (pulling) return // change caused by a pull in progress, not by the user

@@ -11,7 +11,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.trackstuff.data.remote.describeError
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -62,7 +67,7 @@ data class DetailKey(
         fun local(id: Long) = DetailKey(localId = id)
         fun remote(s: MediaSummary) = DetailKey(
             tmdbId = s.ids.tmdbId, imdbId = s.ids.imdbId, tvdbId = s.ids.tvdbId,
-            isSeries = s.isSeries, title = s.title, year = s.year,
+            isSeries = s.isSeries, title = s.title.ifBlank { null }, year = s.year,
         )
     }
 }
@@ -75,6 +80,24 @@ fun AppNavigation() {
     val backStack = rememberNavBackStack(LibraryKey)
     val current = backStack.lastOrNull()
     val showBar = current in TOP_LEVEL
+    val context = LocalContext.current
+
+    // A page URL shared to the app: resolved to a title, then opened (existing library entry preferred).
+    val sharedLink by container.sharedLink.collectAsStateWithLifecycle()
+    LaunchedEffect(sharedLink) {
+        val url = sharedLink ?: return@LaunchedEffect
+        // Consumed only at the end: clearing it first would restart (cancel) this effect.
+        try {
+            val summary = try { container.metadata.resolveLink(url) } catch (e: Exception) {
+                Toast.makeText(context, context.getString(R.string.link_failed, describeError(e)), Toast.LENGTH_LONG).show(); return@LaunchedEffect
+            }
+            if (summary == null) { Toast.makeText(context, R.string.link_unknown, Toast.LENGTH_LONG).show(); return@LaunchedEffect }
+            val existing = container.library.findExisting(summary.ids, summary.isSeries)
+            backStack.add(if (existing != null) DetailKey.local(existing.localId) else DetailKey.remote(summary))
+        } finally {
+            if (container.sharedLink.value == url) container.sharedLink.value = null
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         NavDisplay(

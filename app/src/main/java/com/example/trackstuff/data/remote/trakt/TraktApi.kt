@@ -8,6 +8,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 // ---- OAuth (device code) ----
@@ -118,6 +119,13 @@ interface TraktApi {
     suspend fun refresh(@Body body: TraktRefreshRequest): TraktToken
 
     /** Timestamps of the latest account changes; the lists are only read when `all` moved. */
+    /** Summary by Trakt id or URL slug; no sign-in needed. */
+    @GET("shows/{id}")
+    suspend fun show(@Path("id") id: String): TraktMedia
+
+    @GET("movies/{id}")
+    suspend fun movie(@Path("id") id: String): TraktMedia
+
     @GET("sync/last_activities")
     suspend fun lastActivities(): TraktActivities
 

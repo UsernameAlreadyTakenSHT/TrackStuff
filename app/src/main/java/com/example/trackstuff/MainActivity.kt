@@ -1,5 +1,6 @@
 package com.example.trackstuff
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,6 +22,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        handleLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleLink(intent)
+    }
+
+    /** A page URL tapped (VIEW) or shared (SEND, first URL in the text) opens the matching title. */
+    private fun handleLink(intent: Intent?) {
+        val url = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.dataString
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { URL_IN_TEXT.find(it)?.value }
+            else -> null
+        } ?: return
+        (application as TrackStuffApp).container.sharedLink.value = url
     }
 
     override fun onStart() {
@@ -32,5 +49,9 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         (application as TrackStuffApp).container.sync.inForeground = false
         super.onStop()
+    }
+
+    private companion object {
+        val URL_IN_TEXT = Regex("""https?://\S+""")
     }
 }

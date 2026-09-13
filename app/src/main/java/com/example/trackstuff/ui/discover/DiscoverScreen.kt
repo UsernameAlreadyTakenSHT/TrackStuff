@@ -18,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -122,10 +123,13 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
                         if (problem != null && MetadataRepository.isConfigProblem(problem)) TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.setup_open_settings)) }
                     }
                 }
-                else -> LazyColumn(contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    rows.forEach { row ->
-                        item(key = row.key) {
-                            PosterRow(title = row.title, items = row.items, posterFor = { key -> posters.value[key] })
+                // Pull down: same as the refresh button (once an hour at most).
+                else -> PullToRefreshBox(isRefreshing = state.loading, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        rows.forEach { row ->
+                            item(key = row.key) {
+                                PosterRow(title = row.title, items = row.items, posterFor = { key -> posters.value[key] })
+                            }
                         }
                     }
                 }

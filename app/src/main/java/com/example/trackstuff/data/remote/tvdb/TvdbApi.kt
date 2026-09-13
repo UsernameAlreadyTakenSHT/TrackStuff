@@ -176,6 +176,13 @@ interface TvdbApi {
         @Query("limit") limit: Int = 20,
     ): TvdbResponse<List<TvdbSearchItem>>
 
+    /** Base record by URL slug (the part after `thetvdb.com/series/`). */
+    @GET("series/slug/{slug}")
+    suspend fun seriesBySlug(@Path("slug") slug: String): TvdbResponse<TvdbBaseRecord>
+
+    @GET("movies/slug/{slug}")
+    suspend fun movieBySlug(@Path("slug") slug: String): TvdbResponse<TvdbBaseRecord>
+
     @GET("series/{id}/extended")
     suspend fun series(@Path("id") id: Int, @Query("meta") meta: String = "translations"): TvdbResponse<TvdbExtended>
 

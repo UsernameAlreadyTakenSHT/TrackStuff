@@ -7,6 +7,7 @@ import com.example.trackstuff.data.settings.SettingsRepository
 import com.example.trackstuff.data.sync.SyncCoordinator
 import com.example.trackstuff.data.sync.SyncFailure
 import com.example.trackstuff.domain.LibraryItem
+import com.example.trackstuff.domain.MediaKind
 import com.example.trackstuff.domain.WatchStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,10 +32,26 @@ data class LibraryUiState(
     val total: Int = 0,
     /** False until at least one online database key is set: the empty library then points to Settings. */
     val configured: Boolean = true,
+    /** Active filter: free text (title) and category, applied to every row. */
+    val query: String = "",
+    val kind: MediaKind? = null,
 )
 
-class LibraryViewModel(private val library: LibraryRepository, settings: SettingsRepository, sync: SyncCoordinator) : ViewModel() {
-    val state: StateFlow<LibraryUiState> = combine(library.items, settings.settings) { items, s ->
+class LibraryViewModel(private val library: LibraryRepository, settings: SettingsRepository, private val sync: SyncCoordinator) : ViewModel() {
+    /** True while a service is syncing (pull-to-refresh indicator). */
+    val syncing: StateFlow<Boolean> = sync.state.map { it.running != null }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun syncNow() = sync.syncNow()
+
+    private val query = MutableStateFlow("")
+    private val kind = MutableStateFlow<MediaKind?>(null)
+
+    fun setQuery(q: String) { query.value = q }
+    fun setKind(k: MediaKind?) { kind.value = k }
+
+    val state: StateFlow<LibraryUiState> = combine(library.items, settings.settings, query, kind) { all, s, q, k ->
+        val needle = q.trim()
+        val items = all.filter { (k == null || it.details.kind == k) && (needle.isEmpty() || it.details.title.contains(needle, ignoreCase = true) || it.details.originalTitle?.contains(needle, ignoreCase = true) == true) }
         val byRecent = items.sortedByDescending { it.tracking.updatedAt }
         val today = java.time.LocalDate.now().toString()
         LibraryUiState(
@@ -44,8 +61,9 @@ class LibraryViewModel(private val library: LibraryRepository, settings: Setting
                 .sortedBy { it.details.nextAired },
             startWatching = byRecent.filter { it.tracking.status == WatchStatus.PLANNED },
             history = byRecent.filter { it.tracking.status == WatchStatus.COMPLETED },
-            total = items.size,
+            total = all.size,
             configured = s.hasTmdb || s.hasTvdb,
+            query = q, kind = k,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 

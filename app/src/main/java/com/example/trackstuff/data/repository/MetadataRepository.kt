@@ -329,6 +329,56 @@ class MetadataRepository(
         return url
     }
 
+    // ------------------------------------------------------------------ Shared links
+
+    /**
+     * Title behind a page URL shared to the app (IMDb, TMDB, Trakt, TVDB), or null when the link is not one
+     * of those. Slugs (Trakt, TVDB) need the matching service configured; an IMDb id is resolved with whatever
+     * is available (TMDB, TVDB, the IMDb datasets, omdb.org), and kept as an IMDb-only summary otherwise.
+     */
+    suspend fun resolveLink(url: String): MediaSummary? {
+        val s = settingsRepo.current()
+        LINK_TMDB.find(url)?.let { m ->
+            return MediaSummary(ids = ExternalIds(tmdbId = m.groupValues[2].toInt()), isSeries = m.groupValues[1] == "tv", title = "", source = DataSource.TMDB)
+        }
+        LINK_TVDB_ID.find(url)?.let { m ->
+            return MediaSummary(ids = ExternalIds(tvdbId = m.groupValues[2].toInt()), isSeries = m.groupValues[1] == "series", title = "", source = DataSource.TVDB)
+        }
+        LINK_TVDB_SLUG.find(url)?.let { m ->
+            val api = tvdb(s) ?: return null
+            val series = m.groupValues[1] == "series"
+            val rec = (if (series) api.seriesBySlug(m.groupValues[2]) else api.movieBySlug(m.groupValues[2])).data ?: return null
+            return rec.toSummary(series)
+        }
+        LINK_TRAKT.find(url)?.let { m ->
+            if (!s.hasTrakt) return null
+            val api = com.example.trackstuff.data.remote.trakt.TraktApi.create(s.traktClientId) { null }
+            val series = m.groupValues[1] == "shows"
+            val media = if (series) api.show(m.groupValues[2]) else api.movie(m.groupValues[2])
+            return MediaSummary(
+                ids = ExternalIds(tmdbId = media.ids.tmdb, imdbId = media.ids.imdb, tvdbId = media.ids.tvdb, traktId = media.ids.trakt),
+                isSeries = series, title = media.title ?: "", year = media.year, source = DataSource.TRAKT,
+            )
+        }
+        LINK_IMDB.find(url)?.let { m ->
+            val tt = m.groupValues[1]
+            tmdb(s)?.let { api ->
+                val found = api.find(tt, "imdb_id", s.language)
+                found.movieResults.firstOrNull()?.let { return it.copy(mediaType = "movie").toSummary().copy(ids = ExternalIds(tmdbId = it.id, imdbId = tt)) }
+                found.tvResults.firstOrNull()?.let { return it.copy(mediaType = "tv").toSummary().copy(ids = ExternalIds(tmdbId = it.id, imdbId = tt)) }
+            }
+            tvdb(s)?.let { api ->
+                val hit = api.byRemoteId(tt).data?.firstOrNull { it.series != null || it.movie != null }
+                hit?.series?.let { return it.toSummary(true).copy(ids = ExternalIds(tvdbId = it.id, imdbId = tt)) }
+                hit?.movie?.let { return it.toSummary(false).copy(ids = ExternalIds(tvdbId = it.id, imdbId = tt)) }
+            }
+            imdb.details(tt)?.let { return MediaSummary(ids = it.ids, isSeries = it.isSeries, title = it.title, year = it.year, source = DataSource.IMDB) }
+            omdbOrg.find(ExternalIds(imdbId = tt), false, null, null)?.let { return MediaSummary(ids = ExternalIds(imdbId = tt, omdbOrgId = it.id), isSeries = it.isSeries, title = it.name, year = it.year, source = DataSource.OMDB_ORG) }
+            return MediaSummary(ids = ExternalIds(imdbId = tt), isSeries = false, title = "", source = DataSource.OMDB)
+        }
+        return null
+    }
+
     // ------------------------------------------------------------------ Detail page
 
     /**
@@ -715,6 +765,12 @@ class MetadataRepository(
         const val ROW_SIZE = 100
         const val TMDB_PAGES = ROW_SIZE / 20 + 2
         /** Discover rows are kept in memory this long; the HTTP cache (24 h) covers the rest. */
+        /** Page URLs recognised by [resolveLink]. */
+        val LINK_IMDB = Regex("""imdb\.com/title/(tt\d+)""")
+        val LINK_TMDB = Regex("""themoviedb\.org/(movie|tv)/(\d+)""")
+        val LINK_TVDB_ID = Regex("""thetvdb\.com/dereferrer/(series|movie)/(\d+)""")
+        val LINK_TVDB_SLUG = Regex("""thetvdb\.com/(series|movies)/([A-Za-z0-9-]+)""")
+        val LINK_TRAKT = Regex("""trakt\.tv/(shows|movies)/([A-Za-z0-9-]+)""")
         const val DISCOVER_MEMO_MS = 60 * 60 * 1000L
         /** Memo lifetime when a source failed for a non-configuration reason (network, server). */
         const val DISCOVER_RETRY_MS = 5 * 60 * 1000L

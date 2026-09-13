@@ -31,6 +31,8 @@ class AppContainer(context: Context) {
     val simkl = SimklSyncService(settings, library)
     val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
     val sync = SyncCoordinator(settings, trakt, simkl, appScope).also { c -> library.onLocalChange = { c.onLocalChange() } }
+    /** URL shared to the app (share sheet or link tap), consumed by the navigation once resolved. */
+    val sharedLink = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 }
 
 class TrackStuffApp : Application(), coil.ImageLoaderFactory {
