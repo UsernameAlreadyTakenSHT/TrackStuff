@@ -155,8 +155,8 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 AsyncImage(model = d.backdropUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
         }
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.Bottom) {
-            PosterImage(d.posterUrl, d.title, Modifier.width(110.dp))
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
+            PosterImage(d.posterUrl, d.title, Modifier.width(132.dp))
             Column(Modifier.padding(start = 12.dp, bottom = 4.dp)) {
                 Text(d.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 if (d.originalTitle != null && d.originalTitle != d.title) {
@@ -190,7 +190,6 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
         if (refreshing) Text(stringResource(R.string.detail_updating), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp))
 
         // ---- Add / tracking
-        Spacer(Modifier.height(8.dp))
         if (item == null) AddSection(vm) else TrackingSection(item, vm, episodes)
 
         // ---- Episodes of a title not in the library yet (read-only, folded by default)
@@ -313,7 +312,6 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel, episodes: Li
     // counters only remain when no episode list could be fetched.
     var open by rememberSaveable { mutableStateOf(false) }
     if (d.isSeries) {
-        Spacer(Modifier.height(8.dp))
         Row(
             Modifier.fillMaxWidth().then(if (episodes.isNotEmpty()) Modifier.clickable { open = !open } else Modifier).padding(horizontal = 16.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
