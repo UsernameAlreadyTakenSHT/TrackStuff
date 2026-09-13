@@ -53,7 +53,11 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
      */
     suspend fun addStub(details: MediaDetails, tracking: UserTracking): Long {
         val t = tracking.lastSyncedTrakt ?: tracking.lastSyncedSimkl ?: System.currentTimeMillis()
-        val aligned = tracking.copy(addedAt = t, updatedAt = t, syncedStatus = tracking.status, syncedSeason = tracking.currentSeason, syncedEpisode = tracking.currentEpisode)
+        val aligned = tracking.copy(
+            addedAt = t, updatedAt = t,
+            traktSyncedStatus = tracking.status, traktSyncedSeason = tracking.currentSeason, traktSyncedEpisode = tracking.currentEpisode,
+            simklSyncedStatus = tracking.status, simklSyncedSeason = tracking.currentSeason, simklSyncedEpisode = tracking.currentEpisode,
+        )
         return dao.upsert(MediaEntity.from(details, aligned, needsEnrichment = true))
     }
 
@@ -87,9 +91,12 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
             e.copy(
                 lastSyncedTrakt = if (trakt) now else e.lastSyncedTrakt,
                 lastSyncedSimkl = if (simkl) now else e.lastSyncedSimkl,
-                syncedStatus = pushed?.status ?: e.syncedStatus,
-                syncedSeason = pushed?.currentSeason ?: e.syncedSeason,
-                syncedEpisode = pushed?.currentEpisode ?: e.syncedEpisode,
+                traktSyncedStatus = if (trakt && pushed != null) pushed.status else e.traktSyncedStatus,
+                traktSyncedSeason = if (trakt && pushed != null) pushed.currentSeason else e.traktSyncedSeason,
+                traktSyncedEpisode = if (trakt && pushed != null) pushed.currentEpisode else e.traktSyncedEpisode,
+                simklSyncedStatus = if (simkl && pushed != null) pushed.status else e.simklSyncedStatus,
+                simklSyncedSeason = if (simkl && pushed != null) pushed.currentSeason else e.simklSyncedSeason,
+                simklSyncedEpisode = if (simkl && pushed != null) pushed.currentEpisode else e.simklSyncedEpisode,
                 traktId = ids?.traktId ?: e.traktId,
                 simklId = ids?.simklId ?: e.simklId,
                 omdbOrgId = e.omdbOrgId ?: ids?.omdbOrgId,

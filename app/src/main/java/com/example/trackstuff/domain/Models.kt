@@ -156,10 +156,13 @@ data class UserTracking(
     val updatedAt: Long = System.currentTimeMillis(),
     val lastSyncedTrakt: Long? = null,
     val lastSyncedSimkl: Long? = null,
-    /** Status and position as last pushed to the services (null status = never pushed): drives delta pushes. */
-    val syncedStatus: WatchStatus? = null,
-    val syncedSeason: Int = 0,
-    val syncedEpisode: Int = 0,
+    /** Status and position as last pushed to / pulled from each service (null status = never): drives delta pushes. */
+    val traktSyncedStatus: WatchStatus? = null,
+    val traktSyncedSeason: Int = 0,
+    val traktSyncedEpisode: Int = 0,
+    val simklSyncedStatus: WatchStatus? = null,
+    val simklSyncedSeason: Int = 0,
+    val simklSyncedEpisode: Int = 0,
 )
 
 data class LibraryItem(

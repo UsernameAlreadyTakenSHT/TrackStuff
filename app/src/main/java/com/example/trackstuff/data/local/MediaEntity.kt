@@ -78,9 +78,12 @@ data class MediaEntity(
     val updatedAt: Long,
     val lastSyncedTrakt: Long?,
     val lastSyncedSimkl: Long?,
-    val syncedStatus: WatchStatus? = null,
-    val syncedSeason: Int = 0,
-    val syncedEpisode: Int = 0,
+    @androidx.room.ColumnInfo(name = "syncedStatus") val traktSyncedStatus: WatchStatus? = null,
+    @androidx.room.ColumnInfo(name = "syncedSeason") val traktSyncedSeason: Int = 0,
+    @androidx.room.ColumnInfo(name = "syncedEpisode") val traktSyncedEpisode: Int = 0,
+    val simklSyncedStatus: WatchStatus? = null,
+    val simklSyncedSeason: Int = 0,
+    val simklSyncedEpisode: Int = 0,
     /** True when the page has not been enriched by TMDB/TVDB/OMDb yet (e.g. imported from Trakt). */
     val needsEnrichment: Boolean = false,
 ) {
@@ -122,9 +125,12 @@ data class MediaEntity(
             updatedAt = updatedAt,
             lastSyncedTrakt = lastSyncedTrakt,
             lastSyncedSimkl = lastSyncedSimkl,
-            syncedStatus = syncedStatus,
-            syncedSeason = syncedSeason,
-            syncedEpisode = syncedEpisode,
+            traktSyncedStatus = traktSyncedStatus,
+            traktSyncedSeason = traktSyncedSeason,
+            traktSyncedEpisode = traktSyncedEpisode,
+            simklSyncedStatus = simklSyncedStatus,
+            simklSyncedSeason = simklSyncedSeason,
+            simklSyncedEpisode = simklSyncedEpisode,
         ),
     )
 
@@ -177,9 +183,12 @@ data class MediaEntity(
             updatedAt = tracking.updatedAt,
             lastSyncedTrakt = tracking.lastSyncedTrakt,
             lastSyncedSimkl = tracking.lastSyncedSimkl,
-            syncedStatus = tracking.syncedStatus,
-            syncedSeason = tracking.syncedSeason,
-            syncedEpisode = tracking.syncedEpisode,
+            traktSyncedStatus = tracking.traktSyncedStatus,
+            traktSyncedSeason = tracking.traktSyncedSeason,
+            traktSyncedEpisode = tracking.traktSyncedEpisode,
+            simklSyncedStatus = tracking.simklSyncedStatus,
+            simklSyncedSeason = tracking.simklSyncedSeason,
+            simklSyncedEpisode = tracking.simklSyncedEpisode,
             needsEnrichment = needsEnrichment,
         )
     }

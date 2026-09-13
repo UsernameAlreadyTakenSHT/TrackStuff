@@ -277,7 +277,7 @@ class TraktSyncService(
 
         fun ids(i: LibraryItem) = i.details.ids.toTrakt()
         /** Reference state for the delta: what was pushed to Trakt before, or nothing if never pushed there. */
-        fun pushedBefore(i: LibraryItem) = if (i.tracking.lastSyncedTrakt != null) i.tracking.syncedStatus else null
+        fun pushedBefore(i: LibraryItem) = if (i.tracking.lastSyncedTrakt != null) i.tracking.traktSyncedStatus else null
         val movies = toPush.filter { !it.details.isSeries }
         val shows = toPush.filter { it.details.isSeries }
         val notFound = mutableListOf<TraktIds>()
@@ -301,7 +301,7 @@ class TraktSyncService(
             when {
                 t.status == WatchStatus.COMPLETED -> if (pushedBefore(s) != WatchStatus.COMPLETED) TraktSyncShow(ids(s)) else null // whole show
                 t.status == WatchStatus.WATCHING && t.currentSeason > 0 -> {
-                    val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.syncedSeason to t.syncedEpisode else 0 to 0
+                    val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.traktSyncedSeason to t.traktSyncedEpisode else 0 to 0
                     val delta = episodesBetween(from.first, from.second, t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
                     if (delta.isEmpty()) null else TraktSyncShow(ids(s), seasons = delta.map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
                 }
@@ -317,7 +317,7 @@ class TraktSyncService(
         val movedBack = shows.mapNotNull { s ->
             val t = s.tracking
             if (t.status != WatchStatus.WATCHING || pushedBefore(s) == null) return@mapNotNull null
-            val wasAhead = pushedBefore(s) == WatchStatus.COMPLETED || t.syncedSeason > t.currentSeason || (t.syncedSeason == t.currentSeason && t.syncedEpisode > t.currentEpisode)
+            val wasAhead = pushedBefore(s) == WatchStatus.COMPLETED || t.traktSyncedSeason > t.currentSeason || (t.traktSyncedSeason == t.currentSeason && t.traktSyncedEpisode > t.currentEpisode)
             if (!wasAhead) return@mapNotNull null
             val after = episodesAfter(t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
             if (after.isEmpty()) null else TraktSyncShow(ids(s), seasons = after.map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })

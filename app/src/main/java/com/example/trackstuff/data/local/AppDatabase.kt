@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /** The user's library. */
-@Database(entities = [MediaEntity::class], version = 8, exportSchema = false)
+@Database(entities = [MediaEntity::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
 
@@ -28,9 +28,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** The pushed reference is per service (Trakt columns keep the v8 names). */
+        private val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN simklSyncedStatus TEXT")
+                db.execSQL("ALTER TABLE media ADD COLUMN simklSyncedSeason INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media ADD COLUMN simklSyncedEpisode INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "trackstuff.db")
-                .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

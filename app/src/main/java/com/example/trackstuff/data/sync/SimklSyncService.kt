@@ -244,7 +244,7 @@ class SimklSyncService(
         if (toPush.isEmpty()) return n
 
         fun ids(i: LibraryItem) = i.details.ids.toSimkl()
-        fun pushedBefore(i: LibraryItem) = if (i.tracking.lastSyncedSimkl != null) i.tracking.syncedStatus else null
+        fun pushedBefore(i: LibraryItem) = if (i.tracking.lastSyncedSimkl != null) i.tracking.simklSyncedStatus else null
         val notFound = mutableListOf<Map<*, *>>()
         fun collect(r: SimklSyncResult, vararg keys: String) { keys.forEach { k -> (r.notFound?.get(k) as? List<*>)?.filterIsInstance<Map<*, *>>()?.let { notFound += it } } }
         fun isAnime(i: LibraryItem) = i.details.isSeries && i.details.kind == MediaKind.ANIME
@@ -300,7 +300,7 @@ class SimklSyncService(
         fun seasons(pairs: List<Pair<Int, List<Int>>>) = pairs.map { (num, eps) -> SimklSeasonRef(num, if (eps.isEmpty()) null else eps.map { SimklEpisodeRef(it) }) }
         val forward = inProgress.mapNotNull { s ->
             val t = s.tracking
-            val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.syncedSeason to t.syncedEpisode else 0 to 0
+            val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.simklSyncedSeason to t.simklSyncedEpisode else 0 to 0
             val delta = episodesBetween(from.first, from.second, t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
             if (delta.isEmpty()) null else s to SimklSyncItem(ids(s), seasons = seasons(delta))
         }
@@ -311,7 +311,7 @@ class SimklSyncService(
         val back = inProgress.mapNotNull { s ->
             val t = s.tracking
             val before = pushedBefore(s) ?: return@mapNotNull null
-            val wasAhead = before == WatchStatus.COMPLETED || t.syncedSeason > t.currentSeason || (t.syncedSeason == t.currentSeason && t.syncedEpisode > t.currentEpisode)
+            val wasAhead = before == WatchStatus.COMPLETED || t.simklSyncedSeason > t.currentSeason || (t.simklSyncedSeason == t.currentSeason && t.simklSyncedEpisode > t.currentEpisode)
             if (!wasAhead) return@mapNotNull null
             val after = episodesAfter(t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
             if (after.isEmpty()) null else s to SimklSyncItem(ids(s), seasons = seasons(after))
