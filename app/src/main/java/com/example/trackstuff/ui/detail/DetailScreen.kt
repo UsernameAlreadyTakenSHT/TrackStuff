@@ -157,7 +157,7 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
         }
         // The text column is as tall as the poster (2:3), its lines spread from the title at the top to the
         // ratings at the bottom.
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
             PosterImage(d.posterUrl, d.title, Modifier.width(POSTER_WIDTH))
             Column(Modifier.padding(start = 12.dp).height(POSTER_WIDTH * 3 / 2), verticalArrangement = Arrangement.SpaceBetween) {
                 Text(d.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -166,8 +166,8 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 }
                 val meta = listOfNotNull(
                     formatDate(d.releaseDate) ?: d.year?.toString(),
-                    d.runtimeMinutes?.let { if (d.isSeries) stringResource(R.string.detail_min_per_episode, it) else "${it / 60}h${(it % 60).toString().padStart(2, '0')}" },
-                    d.certification,
+                    // Movie runtime only: episode length and the age rating go to the Info section.
+                    d.runtimeMinutes?.takeIf { !d.isSeries }?.let { "${it / 60}h${(it % 60).toString().padStart(2, '0')}" },
                 ).joinToString(" · ")
                 Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 d.nextAired?.let { next -> formatDate(next)?.let { Text(stringResource(R.string.detail_next_episode, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) } }
@@ -220,6 +220,8 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
             d.countries.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.info_country) to it.joinToString(", ") },
             d.numberOfSeasons?.let { stringResource(R.string.info_seasons) to it.toString() },
             d.numberOfEpisodes?.let { stringResource(R.string.info_episodes) to it.toString() },
+            d.runtimeMinutes?.takeIf { d.isSeries }?.let { stringResource(R.string.info_episode_length) to stringResource(R.string.detail_min_per_episode, it) },
+            d.certification?.let { stringResource(R.string.info_rating) to it },
         )
         if (info.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
