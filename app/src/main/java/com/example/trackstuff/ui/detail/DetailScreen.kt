@@ -155,9 +155,11 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 AsyncImage(model = d.backdropUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
         }
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
-            PosterImage(d.posterUrl, d.title, Modifier.width(132.dp))
-            Column(Modifier.padding(start = 12.dp, bottom = 4.dp)) {
+        // The text column is as tall as the poster (2:3), its lines spread from the title at the top to the
+        // ratings at the bottom.
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) {
+            PosterImage(d.posterUrl, d.title, Modifier.width(POSTER_WIDTH))
+            Column(Modifier.padding(start = 12.dp).height(POSTER_WIDTH * 3 / 2), verticalArrangement = Arrangement.SpaceBetween) {
                 Text(d.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 if (d.originalTitle != null && d.originalTitle != d.title) {
                     Text(d.originalTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -172,14 +174,14 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
                 Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (d.countries.isNotEmpty()) Text(d.countries.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 d.nextAired?.let { next -> formatDate(next)?.let { Text(stringResource(R.string.detail_next_episode, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     KindBadge(d.kind)
                     d.status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically)) }
                 }
                 // Genres on their own line, under the type and status.
-                if (d.genres.isNotEmpty()) Text(d.genres.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                if (d.genres.isNotEmpty()) Text(d.genres.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 // Ratings via OMDb: IMDb (audience), Tomatometer and Metascore (critics); the chips open the sites.
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val r = d.ratings
                     MiniRating("IMDb", formatScore(r.imdb), d.imdbUrl, Color(0xFFF5C518).let { if (isDark()) it else Color(0xFFB8860B) })
                     MiniRating("RT", r.rottenTomatoes?.let { "$it %" }, d.rottenTomatoesUrl, Color(0xFFFA320A))
@@ -465,3 +467,6 @@ private fun MiniRating(label: String, value: String?, url: String?, color: Color
         }
     }
 }
+
+/** Poster width on the page; the header column takes the matching 2:3 height. */
+private val POSTER_WIDTH = 132.dp
