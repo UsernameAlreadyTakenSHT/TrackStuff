@@ -2,6 +2,7 @@ package com.example.trackstuff
 
 import android.content.Intent
 import android.os.Bundle
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,7 +44,10 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // Automatic sync when returning to the foreground (at most once every 15 minutes).
-        (application as TrackStuffApp).container.sync.apply { inForeground = true; onForeground() }
+        val container = (application as TrackStuffApp).container
+        container.sync.apply { inForeground = true; onForeground() }
+        // Episode lists of the series in progress (next episode, Upcoming row), refreshed weekly.
+        container.appScope.launch { container.library.refreshStaleEpisodes() }
     }
 
     override fun onStop() {

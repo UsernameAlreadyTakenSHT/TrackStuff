@@ -149,3 +149,41 @@ data class TmdbFindResult(
     @Json(name = "movie_results") val movieResults: List<TmdbSearchResult> = emptyList(),
     @Json(name = "tv_results") val tvResults: List<TmdbSearchResult> = emptyList(),
 )
+
+// ---- Seasons and episodes ----
+
+@JsonClass(generateAdapter = true)
+data class TmdbSeason(
+    @Json(name = "season_number") val seasonNumber: Int = 0,
+    val episodes: List<TmdbEpisode> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbEpisode(
+    @Json(name = "episode_number") val episodeNumber: Int,
+    @Json(name = "season_number") val seasonNumber: Int = 0,
+    val name: String? = null,
+    @Json(name = "air_date") val airDate: String? = null,
+)
+
+// ---- Watch providers (JustWatch data) ----
+
+@JsonClass(generateAdapter = true)
+data class TmdbWatchProviders(val results: Map<String, TmdbRegionProviders> = emptyMap())
+
+@JsonClass(generateAdapter = true)
+data class TmdbRegionProviders(
+    val link: String? = null,
+    val flatrate: List<TmdbProvider> = emptyList(),
+    val free: List<TmdbProvider> = emptyList(),
+    val ads: List<TmdbProvider> = emptyList(),
+    val rent: List<TmdbProvider> = emptyList(),
+    val buy: List<TmdbProvider> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbProvider(
+    @Json(name = "provider_name") val name: String,
+    @Json(name = "logo_path") val logoPath: String? = null,
+    @Json(name = "display_priority") val priority: Int = 0,
+)

@@ -230,3 +230,12 @@ fun formatDate(iso: String?): String? = iso?.takeIf { it.length == 10 }?.let {
         java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()))
     }.getOrNull()
 }
+
+/** ISO date as "13 Sep" (the year when it is not the current one): for cards, where space is short. */
+fun formatDayMonth(iso: String?): String? = iso?.takeIf { it.length == 10 }?.let {
+    runCatching {
+        val d = java.time.LocalDate.parse(it)
+        val pattern = if (d.year == java.time.LocalDate.now().year) "d MMM" else "d MMM yyyy"
+        d.format(java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.getDefault()))
+    }.getOrNull()
+}

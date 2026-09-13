@@ -49,6 +49,7 @@ import com.example.trackstuff.domain.nextEpisode
 import com.example.trackstuff.ui.components.PosterRow
 import com.example.trackstuff.ui.components.RowItem
 import com.example.trackstuff.ui.components.formatDate
+import com.example.trackstuff.ui.components.formatDayMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +68,8 @@ fun LibraryScreen(vm: LibraryViewModel, onOpen: (Long) -> Unit, onOpenSettings: 
     val rows = remember(state) {
         LibraryRows(
             continueWatching = state.continueWatching.map { it.toRowItem(onOpen, subtitle = it.nextSubtitle(nextLabel), action = { vm.advance(it.localId) }) },
-            upcoming = state.upcoming.map { it.toRowItem(onOpen, subtitle = formatDate(it.details.nextAired)) },
+            // No year on these cards: "S23E1178 · 13 Sep" needs the room.
+            upcoming = state.upcoming.map { it.toRowItem(onOpen, subtitle = state.upcomingEpisodes[it.localId]?.let { ep -> listOfNotNull(ep.ref.label, formatDayMonth(ep.airDate)).joinToString(" · ") } ?: formatDayMonth(it.details.nextAired), year = false) },
             startWatching = state.startWatching.map { it.toRowItem(onOpen) },
             history = state.history.map { it.toRowItem(onOpen) },
         )
@@ -177,13 +179,13 @@ private fun LibraryItem.nextSubtitle(nextLabel: String): String? {
     return if (next != null) String.format(nextLabel, next.label) else "S${tracking.currentSeason}E${tracking.currentEpisode}"
 }
 
-private fun LibraryItem.toRowItem(onOpen: (Long) -> Unit, subtitle: String? = null, action: (() -> Unit)? = null): RowItem {
+private fun LibraryItem.toRowItem(onOpen: (Long) -> Unit, subtitle: String? = null, action: (() -> Unit)? = null, year: Boolean = true): RowItem {
     val d = details
     val t = tracking
     return RowItem(
         key = localId,
         title = d.title,
-        year = d.year,
+        year = d.year.takeIf { year },
         posterUrl = d.posterUrl,
         kind = d.kind,
         status = t.status,

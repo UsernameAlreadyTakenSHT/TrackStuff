@@ -1,5 +1,14 @@
 package com.example.trackstuff.ui.detail
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.example.trackstuff.domain.nextEpisode
+import com.example.trackstuff.domain.WatchProviders
+import com.example.trackstuff.domain.WatchProvider
+import com.example.trackstuff.domain.UserTracking
+import com.example.trackstuff.domain.Episode
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -119,7 +128,7 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                     OutlinedButton(onClick = onBack) { Text(stringResource(R.string.back)) }
                 }
             }
-            else -> DetailContent(d, state.item, state.refreshing, vm, Modifier.padding(padding))
+            else -> DetailContent(d, state.item, state.refreshing, state.providers, state.episodes, vm, Modifier.padding(padding))
         }
     }
 
@@ -135,7 +144,7 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boolean, vm: DetailViewModel, modifier: Modifier) {
+private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boolean, providers: WatchProviders?, episodes: List<Episode>, vm: DetailViewModel, modifier: Modifier) {
     val context = LocalContext.current
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         // ---- Header: background + poster + title
@@ -174,9 +183,21 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
 
         // ---- Add / tracking
         Spacer(Modifier.height(8.dp))
-        if (item == null) AddSection(vm) else TrackingSection(item, vm)
+        if (item == null) AddSection(vm) else TrackingSection(item, vm, episodes)
+
+        // ---- Episodes (series): season chips and the episode list, tap to set the position
+        if (d.isSeries && episodes.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            EpisodesSection(episodes, item?.tracking, onPick = if (item != null) { s, e -> vm.setPosition(s, e) } else null)
+        }
 
         HorizontalDivider(Modifier.padding(vertical = 12.dp))
+
+        // ---- Where to watch (TMDB / JustWatch, user's region)
+        if (providers != null && !providers.isEmpty) {
+            ProvidersSection(providers)
+            HorizontalDivider(Modifier.padding(vertical = 12.dp))
+        }
 
         // ---- External ratings
         SectionTitle(stringResource(R.string.detail_ratings))
@@ -278,7 +299,7 @@ private fun AddSection(vm: DetailViewModel) {
 }
 
 @Composable
-private fun TrackingSection(item: LibraryItem, vm: DetailViewModel) {
+private fun TrackingSection(item: LibraryItem, vm: DetailViewModel, episodes: List<Episode>) {
     val t = item.tracking
     val d = item.details
 
@@ -312,6 +333,16 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel) {
         }
     }
 
+    // Next episode to watch, with its title and air date when the episode list is known.
+    if (d.isSeries && t.status != WatchStatus.COMPLETED) {
+        val next = nextEpisode(t, d.seasonEpisodes)
+        if (next != null) {
+            val ep = episodes.firstOrNull { it.season == next.season && it.number == next.episode }
+            val text = listOfNotNull(next.label, ep?.title, ep?.airDate?.let { formatDate(it) }).joinToString(" · ")
+            Text(stringResource(R.string.library_next, text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+    }
+
     Spacer(Modifier.height(8.dp))
 
     val sync = listOfNotNull(t.lastSyncedTrakt?.let { "Trakt" }, t.lastSyncedSimkl?.let { "Simkl" })
@@ -339,3 +370,76 @@ private fun CreditLine(label: String, value: String) {
     }
 }
 
+
+/** Streaming, free, rental and purchase services in the user's region; the row opens the JustWatch page. */
+@Composable
+private fun ProvidersSection(p: WatchProviders) {
+    val context = LocalContext.current
+    SectionTitle(stringResource(R.string.detail_watch, p.region))
+    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ProviderLine(stringResource(R.string.watch_stream), p.stream, p.link)
+        ProviderLine(stringResource(R.string.watch_free), p.free, p.link)
+        ProviderLine(stringResource(R.string.watch_rent), p.rent, p.link)
+        ProviderLine(stringResource(R.string.watch_buy), p.buy, p.link)
+    }
+    Text(stringResource(R.string.watch_source), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).clickable(enabled = p.link != null) { p.link?.let { openUrl(context, it) } })
+}
+
+@Composable
+private fun ProviderLine(label: String, providers: List<WatchProvider>, link: String?) {
+    if (providers.isEmpty()) return
+    val context = LocalContext.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            providers.forEach { pr ->
+                Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable(enabled = link != null) { link?.let { openUrl(context, it) } }, contentAlignment = Alignment.Center) {
+                    if (pr.logoUrl != null) AsyncImage(model = pr.logoUrl, contentDescription = pr.name, modifier = Modifier.fillMaxSize())
+                    else Text(pr.name.take(2), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Season chips and the episodes of the selected season. Episodes up to the current position are ticked;
+ * tapping one (library titles) marks the series watched up to it.
+ */
+@Composable
+private fun EpisodesSection(episodes: List<Episode>, tracking: UserTracking?, onPick: ((Int, Int) -> Unit)?) {
+    val seasons = remember(episodes) { episodes.map { it.season }.distinct().sorted() }
+    val current = tracking?.currentSeason?.takeIf { it > 0 } ?: seasons.first()
+    var selected by rememberSaveable(current) { mutableStateOf(current) }
+    SectionTitle(stringResource(R.string.detail_episodes_title))
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        seasons.forEach { s -> FilterChip(selected = selected == s, onClick = { selected = s }, label = { Text("S$s") }) }
+    }
+    val today = remember { java.time.LocalDate.now().toString() }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        episodes.filter { it.season == selected }.forEach { ep ->
+            val watched = tracking != null && (ep.season < tracking.currentSeason || (ep.season == tracking.currentSeason && ep.number <= tracking.currentEpisode))
+            val future = ep.airDate != null && ep.airDate > today
+            Row(
+                Modifier.fillMaxWidth().then(if (onPick != null) Modifier.clickable { onPick(ep.season, ep.number) } else Modifier).padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    if (watched) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (watched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text("E${ep.number}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 10.dp).width(40.dp))
+                Text(
+                    ep.title ?: "—",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (future) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                ep.airDate?.let { formatDate(it) }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp)) }
+            }
+        }
+    }
+}

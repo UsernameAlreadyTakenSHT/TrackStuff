@@ -219,3 +219,23 @@ fun MediaDetails.fillMissingFrom(other: MediaDetails) = copy(
     // A TMDB "Movie" page can be reclassified as Anime/Documentary thanks to TVDB/omdb.org genres.
     kind = if (kind == MediaKind.MOVIE || kind == MediaKind.SERIES) other.kind.takeIf { it == MediaKind.ANIME || it == MediaKind.DOCUMENTARY } ?: kind else kind,
 )
+
+/** One episode of a series (title and air date may be unknown). Air dates are ISO `yyyy-MM-dd`. */
+data class Episode(val season: Int, val number: Int, val title: String? = null, val airDate: String? = null) {
+    val ref: EpisodeRef get() = EpisodeRef(season, number)
+}
+
+/** A streaming / rental / purchase service offering a title in the user's region. */
+data class WatchProvider(val name: String, val logoUrl: String?)
+
+/** Where a title can be watched in one region (TMDB, data by JustWatch); [link] opens the JustWatch page. */
+data class WatchProviders(
+    val region: String,
+    val link: String?,
+    val stream: List<WatchProvider> = emptyList(),
+    val free: List<WatchProvider> = emptyList(),
+    val rent: List<WatchProvider> = emptyList(),
+    val buy: List<WatchProvider> = emptyList(),
+) {
+    val isEmpty: Boolean get() = stream.isEmpty() && free.isEmpty() && rent.isEmpty() && buy.isEmpty()
+}

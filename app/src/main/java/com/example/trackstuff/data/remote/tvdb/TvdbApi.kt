@@ -176,6 +176,10 @@ interface TvdbApi {
         @Query("limit") limit: Int = 20,
     ): TvdbResponse<List<TvdbSearchItem>>
 
+    /** Episodes in the default order, 500 per page (`links.next` null on the last page). */
+    @GET("series/{id}/episodes/default")
+    suspend fun episodes(@Path("id") id: Int, @Query("page") page: Int = 0): TvdbEpisodesResponse
+
     /** Base record by URL slug (the part after `thetvdb.com/series/`). */
     @GET("series/slug/{slug}")
     suspend fun seriesBySlug(@Path("slug") slug: String): TvdbResponse<TvdbBaseRecord>
@@ -227,3 +231,21 @@ interface TvdbApi {
         }
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class TvdbEpisodesResponse(val data: TvdbEpisodesData? = null, val links: TvdbLinks? = null)
+
+@JsonClass(generateAdapter = true)
+data class TvdbEpisodesData(val episodes: List<TvdbEpisode> = emptyList())
+
+@JsonClass(generateAdapter = true)
+data class TvdbEpisode(
+    val seasonNumber: Int? = null,
+    val number: Int? = null,
+    val name: String? = null,
+    /** ISO date. */
+    val aired: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbLinks(val next: String? = null)

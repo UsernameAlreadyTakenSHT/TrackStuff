@@ -6,9 +6,10 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /** The user's library. */
-@Database(entities = [MediaEntity::class], version = 10, exportSchema = false)
+@Database(entities = [MediaEntity::class, EpisodeEntity::class], version = 11, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
+    abstract fun episodeDao(): EpisodeDao
 
     companion object {
         /** Statuses reduced to planned / watching / completed: on hold becomes watching, dropped becomes planned. */
@@ -54,9 +55,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Episode list per library series, plus the time it was fetched. */
+        private val MIGRATION_10_11 = object : androidx.room.migration.Migration(10, 11) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN episodesAt INTEGER")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `episode` (`localId` INTEGER NOT NULL, `season` INTEGER NOT NULL, `number` INTEGER NOT NULL, `title` TEXT, `airDate` TEXT, PRIMARY KEY(`localId`, `season`, `number`), FOREIGN KEY(`localId`) REFERENCES `media`(`localId`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_episode_airDate` ON `episode` (`airDate`)")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "trackstuff.db")
-                .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

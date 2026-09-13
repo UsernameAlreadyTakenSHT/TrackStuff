@@ -79,6 +79,10 @@ interface OmdbApi {
     @GET("/")
     suspend fun byImdbId(@Query("apikey") apiKey: String, @Query("i") imdbId: String, @Query("plot") plot: String = "full"): OmdbTitle
 
+    /** Episodes of one season: titles and release dates (one request per season). */
+    @GET("/")
+    suspend fun season(@Query("apikey") apiKey: String, @Query("i") imdbId: String, @Query("Season") season: Int): OmdbSeason
+
     @GET("/")
     suspend fun byTitle(
         @Query("apikey") apiKey: String,
@@ -100,3 +104,19 @@ interface OmdbApi {
         fun create(): OmdbApi = Network.retrofit("https://www.omdbapi.com/").create(OmdbApi::class.java)
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class OmdbSeason(
+    @Json(name = "Response") val response: String? = null,
+    @Json(name = "Season") val season: String? = null,
+    @Json(name = "totalSeasons") val totalSeasons: String? = null,
+    @Json(name = "Episodes") val episodes: List<OmdbEpisode> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class OmdbEpisode(
+    @Json(name = "Title") val title: String? = null,
+    /** `dd MMM yyyy` or `N/A`. */
+    @Json(name = "Released") val released: String? = null,
+    @Json(name = "Episode") val episode: String? = null,
+)

@@ -55,3 +55,31 @@ interface MediaDao {
     @Delete
     suspend fun delete(entity: MediaEntity)
 }
+
+@Dao
+interface EpisodeDao {
+    @Query("SELECT * FROM episode WHERE localId = :localId ORDER BY season, number")
+    fun observe(localId: Long): Flow<List<EpisodeEntity>>
+
+    @Query("SELECT * FROM episode WHERE localId = :localId ORDER BY season, number")
+    suspend fun of(localId: Long): List<EpisodeEntity>
+
+    /** First episode airing on or after [today] for every series that has one. */
+    @Query("SELECT localId, season, number, MIN(airDate) AS airDate FROM episode WHERE airDate >= :today GROUP BY localId")
+    fun observeUpcoming(today: String): Flow<List<UpcomingEpisode>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<EpisodeEntity>)
+
+    @Query("DELETE FROM episode WHERE localId = :localId")
+    suspend fun clear(localId: Long)
+
+    @androidx.room.Transaction
+    suspend fun replace(localId: Long, rows: List<EpisodeEntity>) {
+        clear(localId)
+        insertAll(rows)
+    }
+
+    @Query("UPDATE media SET episodesAt = :at WHERE localId = :localId")
+    suspend fun markFetched(localId: Long, at: Long)
+}

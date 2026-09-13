@@ -6,7 +6,10 @@ import com.example.trackstuff.R
 import androidx.lifecycle.viewModelScope
 import com.example.trackstuff.data.repository.LibraryRepository
 import com.example.trackstuff.data.repository.MetadataRepository
+import com.example.trackstuff.domain.Episode
 import com.example.trackstuff.domain.ExternalIds
+import com.example.trackstuff.domain.WatchProviders
+import kotlinx.coroutines.Job
 import com.example.trackstuff.domain.LibraryItem
 import com.example.trackstuff.domain.MediaDetails
 import com.example.trackstuff.domain.MediaKind
@@ -29,6 +32,10 @@ data class DetailUiState(
     val item: LibraryItem? = null,
     val message: DetailMessage? = null,
     val refreshing: Boolean = false,
+    /** Where to watch in the user's region; null until known (or when TMDB is not configured). */
+    val providers: WatchProviders? = null,
+    /** Episodes of a series (library titles: stored; others: fetched for the page only). */
+    val episodes: List<Episode> = emptyList(),
 ) {
     val inLibrary get() = item != null
 }
@@ -55,9 +62,19 @@ class DetailViewModel(
         if (initialLocalId != null) observeLocal(initialLocalId) else loadRemote()
     }
 
+    private var episodesJob: Job? = null
+    private var providersJob: Job? = null
+
     private fun observeLocal(id: Long) {
+        episodesJob?.cancel()
+        episodesJob = viewModelScope.launch {
+            library.observeEpisodes(id).collect { eps -> _state.update { it.copy(episodes = eps) } }
+        }
+        // Episode list fetched once a week at most; providers looked up once per page.
+        viewModelScope.launch { runCatching { library.refreshEpisodes(id) } }
         viewModelScope.launch {
             library.observe(id).collect { item ->
+                if (item != null && providersJob == null) loadProviders(item.details)
                 if (item == null) _state.update { it.copy(loading = false, item = null) }
                 else _state.update { it.copy(loading = false, item = item, details = item.details, error = null) }
             }
@@ -76,10 +93,32 @@ class DetailViewModel(
                 }
                 val d = metadata.details(ids, isSeries, title, year)
                 _state.update { it.copy(loading = false, details = d) }
+                loadProviders(d)
+                if (d.isSeries) episodesJob = viewModelScope.launch {
+                    val eps = runCatching { metadata.episodes(d.ids, d.numberOfSeasons, d.title) }.getOrDefault(emptyList())
+                    _state.update { it.copy(episodes = eps) }
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = describeError(e)) }
             }
         }
+    }
+
+    private fun loadProviders(d: MediaDetails) {
+        providersJob = viewModelScope.launch {
+            val p = try { metadata.watchProviders(d.ids, d.isSeries) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            _state.update { it.copy(providers = p) }
+        }
+    }
+
+    /** Tap on an episode: watched up to it; tapping the current position steps back one episode. */
+    fun setPosition(season: Int, episode: Int) {
+        val t = _state.value.item?.tracking ?: return
+        if (t.currentSeason == season && t.currentEpisode == episode) {
+            val eps = _state.value.episodes
+            val prev = eps.lastOrNull { it.season < season || (it.season == season && it.number < episode) }
+            setProgress(prev?.season ?: 0, prev?.number ?: 0)
+        } else setProgress(season, episode)
     }
 
     fun add(status: WatchStatus = WatchStatus.PLANNED) {

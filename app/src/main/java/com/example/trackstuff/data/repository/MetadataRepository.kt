@@ -17,6 +17,9 @@ import com.example.trackstuff.data.remote.tvdb.TvdbSearchItem
 import com.example.trackstuff.data.settings.AppSettings
 import com.example.trackstuff.data.settings.SettingsRepository
 import com.example.trackstuff.domain.DataSource
+import com.example.trackstuff.domain.Episode
+import com.example.trackstuff.domain.WatchProvider
+import com.example.trackstuff.domain.WatchProviders
 import com.example.trackstuff.domain.ExternalIds
 import com.example.trackstuff.domain.MediaDetails
 import com.example.trackstuff.domain.MediaKind
@@ -383,6 +386,81 @@ class MetadataRepository(
             return MediaSummary(ids = ExternalIds(imdbId = tt), isSeries = false, title = "", source = DataSource.OMDB)
         }
         return null
+    }
+
+    // ------------------------------------------------------------------ Episodes and availability
+
+    /**
+     * Episode list of a series (titles, air dates): TMDB (one request per season), then TVDB, then OMDb API
+     * (one request per season, so only when the season count [seasonCount] is known). Specials (season 0)
+     * are left out. Empty when no source can answer.
+     */
+    suspend fun episodes(ids: ExternalIds, seasonCount: Int?, title: String?): List<Episode> {
+        val s = settingsRepo.current()
+        try {
+            val api = tmdb(s)
+            val tmdbId = ids.tmdbId ?: api?.let { resolveTmdbId(it, ids, s.language, true).tmdbId }
+            if (api != null && tmdbId != null) {
+                val count = seasonCount ?: api.tv(tmdbId, s.language).seasons.count { it.seasonNumber > 0 }
+                val seasons = kotlinx.coroutines.coroutineScope { (1..count).map { n -> async { runCatching { api.season(tmdbId, n, s.language) }.getOrNull() } }.awaitAll() }
+                val eps = seasons.filterNotNull().flatMap { season -> season.episodes.map { Episode(season.seasonNumber, it.episodeNumber, it.name?.takeIf { n -> n.isNotBlank() }, it.airDate?.takeIf { d -> d.length == 10 }) } }
+                if (eps.isNotEmpty()) return eps.sortedWith(compareBy({ it.season }, { it.number }))
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TMDB episodes failed: ${errMsg(e)}") }
+        try {
+            val api = tvdb(s)
+            val tvdbId = ids.tvdbId ?: api?.let { a -> ids.imdbId?.let { tt -> a.byRemoteId(tt).data?.firstNotNullOfOrNull { h -> h.series }?.id } ?: findTvdbId(a, title, true, ids.imdbId) }
+            if (api != null && tvdbId != null) {
+                val eps = ArrayList<Episode>()
+                var page = 0
+                while (page < TVDB_EPISODE_PAGES) {
+                    val r = api.episodes(tvdbId, page)
+                    r.data?.episodes?.forEach { e ->
+                        val season = e.seasonNumber ?: return@forEach
+                        val number = e.number ?: return@forEach
+                        if (season > 0 && number > 0) eps += Episode(season, number, e.name?.takeIf { it.isNotBlank() }, e.aired?.takeIf { it.length == 10 })
+                    }
+                    if (r.links?.next.isNullOrBlank()) break
+                    page++
+                }
+                if (eps.isNotEmpty()) return eps.sortedWith(compareBy({ it.season }, { it.number }))
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TVDB episodes failed: ${errMsg(e)}") }
+        try {
+            val imdbId = ids.imdbId
+            if (s.hasOmdb && imdbId != null && seasonCount != null && seasonCount in 1..OMDB_MAX_SEASONS) {
+                val eps = ArrayList<Episode>()
+                for (n in 1..seasonCount) {
+                    val season = omdb.season(s.omdbApiKey, imdbId, n)
+                    if (season.response == "False") break
+                    season.episodes.forEach { e ->
+                        val number = e.episode?.toIntOrNull() ?: return@forEach
+                        eps += Episode(n, number, e.title?.takeIf { it.isNotBlank() && it != "N/A" }, omdbDate(e.released))
+                    }
+                }
+                if (eps.isNotEmpty()) return eps
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "OMDb episodes failed: ${errMsg(e)}") }
+        return emptyList()
+    }
+
+    /** OMDb dates come as ISO or `dd MMM yyyy`; `N/A` when unknown. */
+    private fun omdbDate(s: String?): String? {
+        if (s.isNullOrBlank() || s == "N/A") return null
+        if (s.length == 10 && s[4] == '-') return s
+        return runCatching { java.time.LocalDate.parse(s, java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale.ENGLISH)).toString() }.getOrNull()
+    }
+
+    /** Where to watch in the user's region (TMDB only; nothing else exposes availability). Null when unknown. */
+    suspend fun watchProviders(ids: ExternalIds, isSeries: Boolean): WatchProviders? {
+        val s = settingsRepo.current()
+        val api = tmdb(s) ?: return null
+        val tmdbId = ids.tmdbId ?: resolveTmdbId(api, ids, s.language, isSeries).tmdbId ?: return null
+        val all = if (isSeries) api.tvProviders(tmdbId) else api.movieProviders(tmdbId)
+        val region = s.region.uppercase()
+        val r = all.results[region] ?: return WatchProviders(region, null)
+        fun List<com.example.trackstuff.data.remote.tmdb.TmdbProvider>.toDomain() = sortedBy { it.priority }.map { WatchProvider(it.name, it.logoPath?.let { p -> TmdbApi.IMAGE_BASE + "w92" + p }) }
+        return WatchProviders(region, r.link, stream = r.flatrate.toDomain(), free = (r.free + r.ads).toDomain(), rent = r.rent.toDomain(), buy = r.buy.toDomain())
     }
 
     // ------------------------------------------------------------------ Detail page
@@ -783,6 +861,9 @@ class MetadataRepository(
         /** Problems that only change when the user edits Settings (as opposed to network or server errors). */
         fun isConfigProblem(p: String) = "not set" in p || "not imported" in p
         /** URL fragments of the chart endpoints, evicted from the HTTP cache on an explicit refresh. */
+        /** Episode lists: TVDB pages of 500 (cap), OMDb one request per season (cap, daily quota of 1,000). */
+        const val TVDB_EPISODE_PAGES = 10
+        const val OMDB_MAX_SEASONS = 15
         /** Upcoming: primary release older than this is a re-release. */
         const val UPCOMING_MAX_AGE_DAYS = 180L
         /** Top rated: vote floors that leave the well-known classics. */

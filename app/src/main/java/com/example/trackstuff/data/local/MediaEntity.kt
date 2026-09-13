@@ -84,6 +84,8 @@ data class MediaEntity(
     val simklSyncedEpisode: Int = 0,
     /** True when the page has not been enriched by TMDB/TVDB/OMDb yet (e.g. imported from Trakt). */
     val needsEnrichment: Boolean = false,
+    /** When the episode list (`episode` table) was last fetched; null = never. */
+    val episodesAt: Long? = null,
 ) {
     fun toLibraryItem() = LibraryItem(
         localId = localId,
@@ -221,3 +223,28 @@ class MediaConverters {
         }
     }
 }
+
+/** Episode of a library series (titles, air dates), refreshed with the page. Specials (season 0) are not kept. */
+@Entity(
+    tableName = "episode",
+    primaryKeys = ["localId", "season", "number"],
+    foreignKeys = [androidx.room.ForeignKey(entity = MediaEntity::class, parentColumns = ["localId"], childColumns = ["localId"], onDelete = androidx.room.ForeignKey.CASCADE)],
+    indices = [Index("airDate")],
+)
+data class EpisodeEntity(
+    val localId: Long,
+    val season: Int,
+    val number: Int,
+    val title: String?,
+    /** ISO `yyyy-MM-dd`. */
+    val airDate: String?,
+) {
+    fun toEpisode() = com.example.trackstuff.domain.Episode(season, number, title, airDate)
+
+    companion object {
+        fun from(localId: Long, e: com.example.trackstuff.domain.Episode) = EpisodeEntity(localId, e.season, e.number, e.title, e.airDate)
+    }
+}
+
+/** Next episode to air of a library series. */
+data class UpcomingEpisode(val localId: Long, val season: Int, val number: Int, val airDate: String)

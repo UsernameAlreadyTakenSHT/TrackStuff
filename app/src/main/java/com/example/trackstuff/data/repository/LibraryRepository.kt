@@ -2,7 +2,9 @@ package com.example.trackstuff.data.repository
 
 import android.util.Log
 import com.example.trackstuff.data.local.MediaDao
+import com.example.trackstuff.data.local.EpisodeEntity
 import com.example.trackstuff.data.local.MediaEntity
+import com.example.trackstuff.domain.Episode
 import com.example.trackstuff.domain.ExternalIds
 import com.example.trackstuff.domain.LibraryItem
 import com.example.trackstuff.domain.MediaDetails
@@ -15,7 +17,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 /** Local library (Room). Every page is kept for offline use. */
-class LibraryRepository(private val dao: MediaDao, private val metadata: MetadataRepository, private val settings: com.example.trackstuff.data.settings.SettingsRepository) {
+class LibraryRepository(
+    private val dao: MediaDao,
+    private val episodes: com.example.trackstuff.data.local.EpisodeDao,
+    private val metadata: MetadataRepository,
+    private val settings: com.example.trackstuff.data.settings.SettingsRepository,
+) {
     /** Notified after each tracking change made by the user (triggers the automatic sync). */
     var onLocalChange: (() -> Unit)? = null
 
@@ -66,7 +73,7 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
         val e = dao.getById(localId) ?: return
         val item = e.toLibraryItem()
         val t = transform(item.tracking).copy(updatedAt = System.currentTimeMillis())
-        dao.update(MediaEntity.from(item.details, t, localId, e.needsEnrichment))
+        dao.update(MediaEntity.from(item.details, t, localId, e.needsEnrichment).copy(episodesAt = e.episodesAt))
         onLocalChange?.invoke()
     }
 
@@ -79,7 +86,7 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
 
     suspend fun updateDetails(localId: Long, details: MediaDetails, needsEnrichment: Boolean = false) {
         val e = dao.getById(localId) ?: return
-        dao.update(MediaEntity.from(details, e.toLibraryItem().tracking, localId, needsEnrichment))
+        dao.update(MediaEntity.from(details, e.toLibraryItem().tracking, localId, needsEnrichment).copy(episodesAt = e.episodesAt))
     }
 
     suspend fun setKind(localId: Long, kind: MediaKind) {
@@ -165,7 +172,50 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
         // Keep the category chosen by the user when it differs from the automatic guess.
         val kind = if (d.kind != fresh.kind && d.kind != MediaKind.MOVIE && d.kind != MediaKind.SERIES) d.kind else fresh.kind
         updateDetails(localId, fresh.copy(kind = kind, ids = d.ids.merge(fresh.ids)))
+        if (d.isSeries) try { refreshEpisodes(localId, force = true) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w("Library", "Episodes refresh failed for ${d.title}", e) }
         return get(localId)
+    }
+
+    // ---- Episodes
+
+    fun observeEpisodes(localId: Long): Flow<List<Episode>> = episodes.observe(localId).map { list -> list.map { it.toEpisode() } }
+
+    /** Next episode to air per series (local id → episode), for the Upcoming row. */
+    fun observeUpcomingEpisodes(): Flow<Map<Long, Episode>> = episodes.observeUpcoming(java.time.LocalDate.now().toString())
+        .map { list -> list.associate { it.localId to Episode(it.season, it.number, null, it.airDate) } }
+
+    /**
+     * Fetches the episode list of a series (titles, air dates) unless it was fetched less than
+     * [EPISODES_TTL_MS] ago ([force] ignores that). The season sizes of the page follow the list.
+     */
+    suspend fun refreshEpisodes(localId: Long, force: Boolean = false) {
+        val e = dao.getById(localId) ?: return
+        if (!e.isSeries) return
+        if (!force && e.episodesAt != null && System.currentTimeMillis() - e.episodesAt < EPISODES_TTL_MS) return
+        val item = e.toLibraryItem()
+        val list = metadata.episodes(item.details.ids, item.details.numberOfSeasons, item.details.title)
+        if (list.isEmpty()) return
+        episodes.replace(localId, list.map { EpisodeEntity.from(localId, it) })
+        episodes.markFetched(localId, System.currentTimeMillis())
+        val counts = list.groupBy { it.season }.let { g -> (1..(g.keys.maxOrNull() ?: 0)).map { s -> g[s]?.size ?: 0 } }
+        if (counts.isNotEmpty() && counts != item.details.seasonEpisodes) updateDetails(localId, item.details.copy(seasonEpisodes = counts, numberOfSeasons = item.details.numberOfSeasons ?: counts.size))
+    }
+
+    private @Volatile var staleSweepAt = 0L
+
+    /**
+     * Refreshes the episode lists that are older than a week for the series in progress (the ones whose next
+     * episode matters), at most once an hour. Called when the app comes to the foreground.
+     */
+    suspend fun refreshStaleEpisodes() {
+        val now = System.currentTimeMillis()
+        if (now - staleSweepAt < STALE_SWEEP_MS) return
+        staleSweepAt = now
+        for (e in dao.getAll()) {
+            if (!e.isSeries || e.status == WatchStatus.COMPLETED) continue
+            if (e.episodesAt != null && now - e.episodesAt < EPISODES_TTL_MS) continue
+            try { refreshEpisodes(e.localId) } catch (ex: kotlinx.coroutines.CancellationException) { throw ex } catch (ex: Exception) { Log.w("Library", "Episodes refresh failed for ${e.title}", ex) }
+        }
     }
 
     /** Enriches imported pages (Trakt/Simkl) that have no poster or description yet. */
@@ -180,5 +230,11 @@ class LibraryRepository(private val dao: MediaDao, private val metadata: Metadat
             }
         }
         return count
+    }
+
+    companion object {
+        /** Episode lists follow the series page lifetime: a week. */
+        const val EPISODES_TTL_MS = 7 * 24 * 60 * 60 * 1000L
+        const val STALE_SWEEP_MS = 60 * 60 * 1000L
     }
 }

@@ -100,6 +100,13 @@
     <string name="source_overview">description: %s</string>
     <string name="source_ratings">ratings: OMDb API</string>
     <string name="detail_tracking">My tracking</string>
+    <string name="detail_episodes_title">Episodes</string>
+    <string name="detail_watch">Where to watch (%s)</string>
+    <string name="watch_stream">Stream</string>
+    <string name="watch_free">Free</string>
+    <string name="watch_rent">Rent</string>
+    <string name="watch_buy">Buy</string>
+    <string name="watch_source">Availability by JustWatch via TMDB — tap to see all options.</string>
     <string name="detail_progress">Progress</string>
     <string name="detail_synced">Synced: %s</string>
 

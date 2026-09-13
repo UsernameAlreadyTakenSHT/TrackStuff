@@ -6,6 +6,7 @@ import com.example.trackstuff.data.repository.LibraryRepository
 import com.example.trackstuff.data.settings.SettingsRepository
 import com.example.trackstuff.data.sync.SyncCoordinator
 import com.example.trackstuff.data.sync.SyncFailure
+import com.example.trackstuff.domain.Episode
 import com.example.trackstuff.domain.LibraryItem
 import com.example.trackstuff.domain.MediaKind
 import com.example.trackstuff.domain.WatchStatus
@@ -35,6 +36,8 @@ data class LibraryUiState(
     /** Active filter: free text (title) and category, applied to every row. */
     val query: String = "",
     val kind: MediaKind? = null,
+    /** Next episode to air per series (from the stored episode lists), for the Upcoming row. */
+    val upcomingEpisodes: Map<Long, Episode> = emptyMap(),
 )
 
 class LibraryViewModel(private val library: LibraryRepository, settings: SettingsRepository, private val sync: SyncCoordinator) : ViewModel() {
@@ -49,7 +52,7 @@ class LibraryViewModel(private val library: LibraryRepository, settings: Setting
     fun setQuery(q: String) { query.value = q }
     fun setKind(k: MediaKind?) { kind.value = k }
 
-    val state: StateFlow<LibraryUiState> = combine(library.items, settings.settings, query, kind) { all, s, q, k ->
+    val state: StateFlow<LibraryUiState> = combine(library.items, settings.settings, query, kind, library.observeUpcomingEpisodes()) { all, s, q, k, nextEps ->
         val needle = q.trim()
         val items = all.filter { (k == null || it.details.kind == k) && (needle.isEmpty() || it.details.title.contains(needle, ignoreCase = true) || it.details.originalTitle?.contains(needle, ignoreCase = true) == true) }
         val byRecent = items.sortedByDescending { it.tracking.updatedAt }
@@ -57,8 +60,9 @@ class LibraryViewModel(private val library: LibraryRepository, settings: Setting
         LibraryUiState(
             continueWatching = byRecent.filter { it.tracking.status == WatchStatus.WATCHING },
             // ISO dates compare as strings.
-            upcoming = items.filter { it.details.isSeries && it.tracking.status != WatchStatus.COMPLETED && (it.details.nextAired ?: "") >= today }
-                .sortedBy { it.details.nextAired },
+            upcoming = items.filter { it.details.isSeries && it.tracking.status != WatchStatus.COMPLETED && ((it.details.nextAired ?: "") >= today || nextEps.containsKey(it.localId)) }
+                .sortedBy { nextEps[it.localId]?.airDate ?: it.details.nextAired },
+            upcomingEpisodes = nextEps,
             startWatching = byRecent.filter { it.tracking.status == WatchStatus.PLANNED },
             history = byRecent.filter { it.tracking.status == WatchStatus.COMPLETED },
             total = all.size,

@@ -25,7 +25,7 @@ class AppContainer(context: Context) {
     val imdbDatabase = ImdbDatabase.build(context)
     val imdb = ImdbRepository(context, imdbDatabase.imdbDao(), settings, omdbOrg)
     val metadata = MetadataRepository(settings, omdbOrg, imdb)
-    val library = LibraryRepository(database.mediaDao(), metadata, settings)
+    val library = LibraryRepository(database.mediaDao(), database.episodeDao(), metadata, settings)
     val backup = com.example.trackstuff.data.repository.LibraryBackup(database.mediaDao(), library)
     val trakt = TraktSyncService(settings, library)
     val simkl = SimklSyncService(settings, library)

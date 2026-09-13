@@ -56,6 +56,17 @@ interface TmdbApi {
     @GET("tv/on_the_air")
     suspend fun onTheAir(@Query("language") language: String, @Query("page") page: Int = 1): TmdbPage<TmdbSearchResult>
 
+    /** Episodes of one season (titles, air dates). */
+    @GET("tv/{id}/season/{season}")
+    suspend fun season(@Path("id") id: Int, @Path("season") season: Int, @Query("language") language: String): TmdbSeason
+
+    /** Streaming / rental / purchase availability per region (data by JustWatch). */
+    @GET("movie/{id}/watch/providers")
+    suspend fun movieProviders(@Path("id") id: Int): TmdbWatchProviders
+
+    @GET("tv/{id}/watch/providers")
+    suspend fun tvProviders(@Path("id") id: Int): TmdbWatchProviders
+
     @GET("find/{externalId}")
     suspend fun find(
         @Path("externalId") externalId: String,
