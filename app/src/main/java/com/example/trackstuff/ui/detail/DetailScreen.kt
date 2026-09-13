@@ -1,5 +1,7 @@
 package com.example.trackstuff.ui.detail
 
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.trackstuff.domain.nextEpisode
@@ -185,10 +187,12 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
         Spacer(Modifier.height(8.dp))
         if (item == null) AddSection(vm) else TrackingSection(item, vm, episodes)
 
-        // ---- Episodes (series): season chips and the episode list, tap to set the position
-        if (d.isSeries && episodes.isNotEmpty()) {
+        // ---- Episodes of a title not in the library yet (read-only, folded by default)
+        if (item == null && d.isSeries && episodes.isNotEmpty()) {
+            var open by rememberSaveable { mutableStateOf(false) }
             Spacer(Modifier.height(12.dp))
-            EpisodesSection(episodes, item?.tracking, onPick = if (item != null) { s, e -> vm.setPosition(s, e) } else null)
+            ExpandHeader(stringResource(R.string.detail_episodes_title), open) { open = !open }
+            if (open) EpisodesSection(episodes, null, onPick = null)
         }
 
         HorizontalDivider(Modifier.padding(vertical = 12.dp))
@@ -318,14 +322,25 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel, episodes: Li
         }
     }
 
-    // Progress (series / anime)
+    // Progress (series / anime): position, "+1", and the episode list folded behind the row. The S / E
+    // counters only remain when no episode list could be fetched.
+    var open by rememberSaveable { mutableStateOf(false) }
     if (d.isSeries) {
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().then(if (episodes.isNotEmpty()) Modifier.clickable { open = !open } else Modifier).padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(stringResource(R.string.detail_progress), style = MaterialTheme.typography.labelLarge)
+            if (episodes.isNotEmpty()) Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.weight(1f))
-            Counter("S", t.currentSeason, onChange = { vm.setProgress(it, if (it != t.currentSeason) 0 else t.currentEpisode) })
-            Counter("E", t.currentEpisode, onChange = { vm.setProgress(if (t.currentSeason == 0 && it > 0) 1 else t.currentSeason, it) }, max = d.seasonEpisodes.getOrNull((if (t.currentSeason == 0) 1 else t.currentSeason) - 1))
+            if (episodes.isNotEmpty()) {
+                val max = d.seasonEpisodes.getOrNull((if (t.currentSeason == 0) 1 else t.currentSeason) - 1)
+                Text("S${t.currentSeason}E${t.currentEpisode}" + (max?.let { "/$it" } ?: ""), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            } else {
+                Counter("S", t.currentSeason, onChange = { vm.setProgress(it, if (it != t.currentSeason) 0 else t.currentEpisode) })
+                Counter("E", t.currentEpisode, onChange = { vm.setProgress(if (t.currentSeason == 0 && it > 0) 1 else t.currentSeason, it) }, max = d.seasonEpisodes.getOrNull((if (t.currentSeason == 0) 1 else t.currentSeason) - 1))
+            }
             FilledTonalButton(onClick = vm::nextEpisode, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                 Text("+1")
@@ -342,6 +357,7 @@ private fun TrackingSection(item: LibraryItem, vm: DetailViewModel, episodes: Li
             Text(stringResource(R.string.library_next, text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
     }
+    if (d.isSeries && open && episodes.isNotEmpty()) EpisodesSection(episodes, t, onPick = { s, e -> vm.setPosition(s, e) })
 
     Spacer(Modifier.height(8.dp))
 
@@ -411,8 +427,7 @@ private fun EpisodesSection(episodes: List<Episode>, tracking: UserTracking?, on
     val seasons = remember(episodes) { episodes.map { it.season }.distinct().sorted() }
     val current = tracking?.currentSeason?.takeIf { it > 0 } ?: seasons.first()
     var selected by rememberSaveable(current) { mutableStateOf(current) }
-    SectionTitle(stringResource(R.string.detail_episodes_title))
-    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         seasons.forEach { s -> FilterChip(selected = selected == s, onClick = { selected = s }, label = { Text("S$s") }) }
     }
     val today = remember { java.time.LocalDate.now().toString() }
@@ -441,5 +456,14 @@ private fun EpisodesSection(episodes: List<Episode>, tracking: UserTracking?, on
                 ep.airDate?.let { formatDate(it) }?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp)) }
             }
         }
+    }
+}
+
+/** Section title that folds / unfolds the content below it. */
+@Composable
+private fun ExpandHeader(text: String, open: Boolean, onToggle: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
