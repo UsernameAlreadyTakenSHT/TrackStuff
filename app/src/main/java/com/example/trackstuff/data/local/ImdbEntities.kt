@@ -111,11 +111,14 @@ interface ImdbDao {
     )
     suspend fun searchPrefix(glob: String, limit: Int): List<ImdbTitleEntity>
 
-    /** Titles (or aliases) containing the query anywhere: a full scan, used only when the prefix search finds little. */
+    /**
+     * Titles containing the query anywhere: a scan of the title table only (a few hundred thousand rows),
+     * used when the prefix search finds little. Aliases are prefix-only: scanning millions of alias rows
+     * (Full datasets) took many seconds on a phone.
+     */
     @Query(
         """
-        SELECT * FROM imdb_title WHERE (nameNorm LIKE '%' || :q || '%'
-            OR imdbId IN (SELECT tconst FROM imdb_alias WHERE nameNorm LIKE '%' || :q || '%'))
+        SELECT * FROM imdb_title WHERE nameNorm LIKE '%' || :q || '%'
             AND imdbId NOT IN (:exclude)
         ORDER BY votes DESC LIMIT :limit
         """

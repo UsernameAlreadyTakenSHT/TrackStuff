@@ -92,14 +92,10 @@ interface OmdbOrgDao {
     )
     suspend fun searchPrefix(q: String, glob: String, limit: Int): List<OmdbTitleEntity>
 
-    /** Titles (or aliases) containing the query anywhere: a full scan, used only when the prefix search finds little. */
+    /** Titles containing the query anywhere: a scan of the title table only (aliases are prefix-only, see [searchPrefix]). */
     @Query(
         """
-        SELECT * FROM omdb_title WHERE id IN (
-            SELECT id FROM omdb_title WHERE nameNorm LIKE '%' || :q || '%'
-            UNION
-            SELECT titleId FROM omdb_alias WHERE nameNorm LIKE '%' || :q || '%'
-        ) AND id NOT IN (:exclude)
+        SELECT * FROM omdb_title WHERE nameNorm LIKE '%' || :q || '%' AND id NOT IN (:exclude)
         ORDER BY (year IS NULL) ASC, year DESC
         LIMIT :limit
         """

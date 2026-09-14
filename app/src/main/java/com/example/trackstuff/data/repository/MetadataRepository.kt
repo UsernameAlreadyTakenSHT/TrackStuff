@@ -214,18 +214,19 @@ class MetadataRepository(
     @Volatile private var prefetchedAt = 0L
 
     /**
-     * On unmetered networks, warms the HTTP cache with the pages of the first [PREFETCH_PER_ROW] titles of every
-     * online row (TMDB / TVDB page JSON and the page poster), so that they open offline. Once per
+     * Warms the HTTP cache with the pages of the first titles of every online row ([PREFETCH_PER_ROW] on Wi-Fi,
+     * [PREFETCH_PER_ROW_METERED] on mobile data): TMDB / TVDB page JSON and the page poster, so that they open offline. Once per
      * [PREFETCH_INTERVAL_MS]; cached responses cost nothing.
      */
     private fun prefetchDiscover(outcome: DiscoverOutcome) {
         val now = System.currentTimeMillis()
-        if (now - prefetchedAt < PREFETCH_INTERVAL_MS || !com.example.trackstuff.data.remote.Network.isUnmetered()) return
+        if (now - prefetchedAt < PREFETCH_INTERVAL_MS) return
+        val perRow = if (com.example.trackstuff.data.remote.Network.isUnmetered()) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED
         prefetchedAt = now
         scope.launch {
             val s = settingsRepo.current()
             val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
-            val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(PREFETCH_PER_ROW) }.distinctBy { it.ids to it.isSeries }
+            val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(perRow) }.distinctBy { it.ids to it.isSeries }
             kotlinx.coroutines.coroutineScope {
                 items.map { r ->
                     async {
@@ -905,6 +906,7 @@ class MetadataRepository(
         const val DISCOVER_RETRY_MS = 5 * 60 * 1000L
         /** Page prefetch for offline use: titles per row, parallelism, and how often. */
         const val PREFETCH_PER_ROW = 20
+        const val PREFETCH_PER_ROW_METERED = 8
         const val PREFETCH_CONCURRENCY = 3
         const val PREFETCH_INTERVAL_MS = 12 * 60 * 60 * 1000L
         /** Problems that only change when the user edits Settings (as opposed to network or server errors). */
