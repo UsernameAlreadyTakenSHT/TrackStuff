@@ -213,6 +213,10 @@ class MetadataRepository(
 
     @Volatile private var prefetchedAt = 0L
 
+    /** Progress of the running page prefetch (done to total), null when idle: shown on the Discover screen. */
+    private val _prefetch = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Int>?>(null)
+    val prefetchProgress: kotlinx.coroutines.flow.StateFlow<Pair<Int, Int>?> = _prefetch
+
     /**
      * Warms the HTTP cache with the pages of the first titles of every online row ([PREFETCH_PER_ROW] on Wi-Fi,
      * [PREFETCH_PER_ROW_METERED] on mobile data): TMDB / TVDB page JSON and the page poster, so that they open offline. Once per
@@ -227,6 +231,9 @@ class MetadataRepository(
             val s = settingsRepo.current()
             val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
             val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(perRow) }.distinctBy { it.ids to it.isSeries }
+            val done = java.util.concurrent.atomic.AtomicInteger(0)
+            _prefetch.value = 0 to items.size
+            try {
             kotlinx.coroutines.coroutineScope {
                 items.map { r ->
                     async {
@@ -238,10 +245,12 @@ class MetadataRepository(
                                 }
                                 d?.posterUrl?.let { url -> com.example.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().close() }
                             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
+                            _prefetch.value = done.incrementAndGet() to items.size
                         }
                     }
                 }.awaitAll()
             }
+            } finally { _prefetch.value = null }
         }
     }
 

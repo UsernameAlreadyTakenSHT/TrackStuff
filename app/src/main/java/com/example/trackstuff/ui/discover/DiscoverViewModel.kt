@@ -83,6 +83,9 @@ class DiscoverViewModel(private val metadata: MetadataRepository, library: Libra
     private val _posters = MutableStateFlow<Map<String, String?>>(emptyMap())
     val posters: StateFlow<Map<String, String?>> = _posters
 
+    /** Pages being cached for offline use (done to total), null when idle. */
+    val prefetch: StateFlow<Pair<Int, Int>?> = metadata.prefetchProgress
+
     init { load(force = false) }
 
     fun setSource(source: DataSource) = _state.update { it.copy(source = source) }

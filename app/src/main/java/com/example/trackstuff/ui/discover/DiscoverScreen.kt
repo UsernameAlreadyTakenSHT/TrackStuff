@@ -82,6 +82,16 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
                 }
             }
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            // Pages of the first titles are being cached for offline use: about a minute after a load.
+            val prefetch by vm.prefetch.collectAsStateWithLifecycle()
+            prefetch?.let { (done, total) ->
+                Text(
+                    stringResource(R.string.discover_caching, done, total),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                )
+            }
 
             val inLibraryText = stringResource(R.string.in_library)
             // Rows are built once per data change, not on every recomposition (hundreds of cards).
