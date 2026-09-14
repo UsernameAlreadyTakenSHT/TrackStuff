@@ -518,6 +518,8 @@ class MetadataRepository(
         } catch (e: Exception) {
             Log.w(TAG, "TVDB details failed", e); problems += "TVDB: ${errMsg(e)}"
         }
+        // TMDB gives no TVDB id for movies: looked up by IMDb id so that the page can link to TVDB (one cached request).
+        if (ids.tvdbId == null && ids.imdbId != null) ids = ids.merge(ExternalIds(tvdbId = tvdbIdByImdb(s, ids.imdbId, isSeries)))
 
         // ---- 3. OMDb API (omdbapi.com): IMDb / Rotten Tomatoes / Metacritic ratings, plus poster / synopsis fallback
         var externalRatings: Ratings? = null
@@ -611,6 +613,12 @@ class MetadataRepository(
         else found.movieResults.firstOrNull() ?: found.tvResults.firstOrNull()
         return ExternalIds(tmdbId = hit?.id)
     }
+
+    /** TVDB id of a title known by its IMDb id (search/remoteid), null when unknown or TVDB is not configured. */
+    suspend fun tvdbIdByImdb(s: AppSettings, imdbId: String, isSeries: Boolean): Int? = try {
+        val hits = tvdb(s)?.byRemoteId(imdbId)?.data
+        hits?.firstNotNullOfOrNull { if (isSeries) it.series else it.movie }?.id
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TVDB id lookup failed: ${errMsg(e)}"); null }
 
     /** Checks that a URL responds (HEAD, through the shared client). On a network error it is assumed valid. */
     private suspend fun urlAlive(url: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

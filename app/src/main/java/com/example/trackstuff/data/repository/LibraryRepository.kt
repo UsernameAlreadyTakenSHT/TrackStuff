@@ -176,6 +176,15 @@ class LibraryRepository(
         return get(localId)
     }
 
+    /** Fills in the TVDB id of a title that only has an IMDb id (older library entries): one lookup, then stored. */
+    suspend fun completeIds(localId: Long) {
+        val item = get(localId) ?: return
+        val ids = item.details.ids
+        if (ids.tvdbId != null || ids.imdbId == null) return
+        val tvdbId = metadata.tvdbIdByImdb(settings.current(), ids.imdbId, item.details.isSeries) ?: return
+        updateDetails(localId, item.details.copy(ids = ids.copy(tvdbId = tvdbId)))
+    }
+
     // ---- Episodes
 
     fun observeEpisodes(localId: Long): Flow<List<Episode>> = episodes.observe(localId).map { list -> list.map { it.toEpisode() } }

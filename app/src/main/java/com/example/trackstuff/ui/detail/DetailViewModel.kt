@@ -72,6 +72,7 @@ class DetailViewModel(
         }
         // Episode list fetched once a week at most; providers looked up once per page.
         viewModelScope.launch { runCatching { library.refreshEpisodes(id) } }
+        viewModelScope.launch { runCatching { library.completeIds(id) } }
         viewModelScope.launch {
             library.observe(id).collect { item ->
                 if (item != null && providersJob == null) loadProviders(item.details)
