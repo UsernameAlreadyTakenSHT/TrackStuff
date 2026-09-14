@@ -24,12 +24,12 @@ class AppContainer(context: Context) {
     val omdbOrg = OmdbOrgRepository(context, omdbOrgDatabase.omdbOrgDao(), settings)
     val imdbDatabase = ImdbDatabase.build(context)
     val imdb = ImdbRepository(context, imdbDatabase.imdbDao(), settings, omdbOrg)
-    val metadata = MetadataRepository(settings, omdbOrg, imdb)
+    val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+    val metadata = MetadataRepository(settings, omdbOrg, imdb, context.filesDir, appScope)
     val library = LibraryRepository(database.mediaDao(), database.episodeDao(), metadata, settings)
     val backup = com.example.trackstuff.data.repository.LibraryBackup(database.mediaDao(), library)
     val trakt = TraktSyncService(settings, library)
     val simkl = SimklSyncService(settings, library)
-    val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
     val sync = SyncCoordinator(settings, trakt, simkl, appScope).also { c -> library.onLocalChange = { c.onLocalChange() } }
     /** URL shared to the app (share sheet or link tap), consumed by the navigation once resolved. */
     val sharedLink = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)

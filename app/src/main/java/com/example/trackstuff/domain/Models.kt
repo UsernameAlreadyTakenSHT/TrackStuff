@@ -39,6 +39,7 @@ enum class DataSource(val label: String) {
 }
 
 /** Known external ids of a title. A single one is enough to find the others. */
+@com.squareup.moshi.JsonClass(generateAdapter = true)
 data class ExternalIds(
     val tmdbId: Int? = null,
     val imdbId: String? = null,
@@ -60,6 +61,7 @@ data class ExternalIds(
 }
 
 /** Lightweight search result (before enrichment). */
+@com.squareup.moshi.JsonClass(generateAdapter = true)
 data class MediaSummary(
     val ids: ExternalIds,
     val isSeries: Boolean,

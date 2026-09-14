@@ -182,11 +182,28 @@ object Network {
 
     /** Offline: uses only the cache, even stale. */
     private val offlineInterceptor = Interceptor { chain ->
-        val request: Request = if (isOnline() || !isCacheable(chain.request())) chain.request()
-        else chain.request().newBuilder()
+        val original = chain.request()
+        if (!isCacheable(original)) return@Interceptor chain.proceed(original)
+        val cachedOnly = original.newBuilder()
             .cacheControl(CacheControl.Builder().onlyIfCached().maxStale(OFFLINE_MAX_STALE_DAYS, TimeUnit.DAYS).build())
             .build()
-        chain.proceed(request)
+        if (!isOnline()) return@Interceptor chain.proceed(cachedOnly)
+        // "Online" per the system but the request fails (no real connectivity, captive portal, DNS down):
+        // fall back to the cache as if offline, so that a stale page beats an error.
+        try {
+            chain.proceed(original)
+        } catch (e: java.io.IOException) {
+            val fallback = runCatching { chain.proceed(cachedOnly) }.getOrNull()
+            if (fallback != null && fallback.code != 504) fallback else { fallback?.close(); throw e }
+        }
+    }
+
+    /** True on Wi-Fi / unmetered networks: background prefetches only run there. */
+    fun isUnmetered(): Boolean {
+        if (!::appContext.isInitialized) return false
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }
 
     private fun isOnline(): Boolean {

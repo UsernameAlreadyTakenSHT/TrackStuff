@@ -65,10 +65,10 @@ fun SearchScreen(vm: SearchViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote:
                 keyboardActions = KeyboardActions(onSearch = { vm.search(); keyboard?.hide() }),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            // Source: automatic cascade, or one database only.
+            // Source: automatic cascade, or one database only (OMDb API stays a fallback of the cascade, no chip).
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = state.only == null, onClick = { vm.setSource(null) }, label = { Text(stringResource(R.string.search_source_auto)) })
-                MetadataRepository.SEARCH_ORDER.forEach { s -> FilterChip(selected = state.only == s, onClick = { vm.setSource(s) }, label = { Text(s.label) }) }
+                MetadataRepository.SEARCH_ORDER.filter { it != com.example.trackstuff.domain.DataSource.OMDB }.forEach { s -> FilterChip(selected = state.only == s, onClick = { vm.setSource(s) }, label = { Text(s.label) }) }
             }
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
 

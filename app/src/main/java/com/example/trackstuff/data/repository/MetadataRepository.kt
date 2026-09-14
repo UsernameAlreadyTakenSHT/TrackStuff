@@ -31,6 +31,8 @@ import com.example.trackstuff.domain.guessKind
 import com.example.trackstuff.domain.fillMissingFrom
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 
 private const val TAG = "Metadata"
 
@@ -48,8 +50,10 @@ data class SearchOutcome(
 enum class SectionMedia { MIXED, MOVIES, SERIES }
 
 /** One row of the Discover screen. */
+@com.squareup.moshi.JsonClass(generateAdapter = true)
 data class DiscoverSection(val title: String, val source: DataSource, val items: List<MediaSummary>, val media: SectionMedia, val category: String)
 
+@com.squareup.moshi.JsonClass(generateAdapter = true)
 data class DiscoverOutcome(val sections: List<DiscoverSection>, val problems: List<String>)
 
 /**
@@ -61,6 +65,10 @@ class MetadataRepository(
     private val settingsRepo: SettingsRepository,
     private val omdbOrg: OmdbOrgRepository,
     private val imdb: ImdbRepository,
+    /** Directory for the saved Discover rows. */
+    private val filesDir: java.io.File,
+    /** Application scope for background prefetches. */
+    private val scope: kotlinx.coroutines.CoroutineScope,
 ) {
 
     private var tmdbApi: TmdbApi? = null
@@ -175,7 +183,65 @@ class MetadataRepository(
         val memo = discoverMemo
         if (!force && memo != null && memo.fingerprint == fingerprint && System.currentTimeMillis() - memo.at < memo.ttl) return memo.outcome
         if (force && com.example.trackstuff.data.remote.RefreshLimiter.tryAcquire("discover")) com.example.trackstuff.data.remote.Network.evict { url -> LIST_URL_MARKERS.any { it in url } }
-        return discoverNow().also { discoverMemo = DiscoverMemo(System.currentTimeMillis(), fingerprint, it) }
+        val fresh = discoverNow()
+        // A source that failed for a network reason keeps its last saved rows (the file survives cache eviction).
+        val saved = store.load()
+        val outcome = if (saved == null) fresh else {
+            val failed = fresh.problems.filter { !isConfigProblem(it) }.map { it.substringBefore(':') }.toSet()
+            val have = fresh.sections.map { it.source }.toSet()
+            val kept = saved.sections.filter { it.source.label in failed && it.source !in have }
+            if (kept.isEmpty()) fresh else fresh.copy(sections = fresh.sections + kept, problems = fresh.problems + "Showing saved rows for ${kept.map { it.source.label }.distinct().joinToString(", ")}")
+        }
+        if (fresh.sections.isNotEmpty()) store.save(outcome)
+        discoverMemo = DiscoverMemo(System.currentTimeMillis(), fingerprint, outcome)
+        prefetchDiscover(outcome)
+        return outcome
+    }
+
+    /** Saved Discover rows (JSON file), so that the tab still shows something offline after the HTTP cache was evicted. */
+    private val store = object {
+        private val adapter by lazy { com.example.trackstuff.data.remote.Network.moshi.adapter(DiscoverOutcome::class.java) }
+        private val file get() = java.io.File(filesDir, "discover.json")
+        suspend fun load(): DiscoverOutcome? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { file.takeIf { it.exists() }?.readText()?.let { adapter.fromJson(it) } }.getOrNull()
+        }
+        suspend fun save(o: DiscoverOutcome) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { file.writeText(adapter.toJson(o.copy(problems = emptyList()))) }.onFailure { Log.w(TAG, "Discover rows not saved", it) }
+            Unit
+        }
+    }
+
+    @Volatile private var prefetchedAt = 0L
+
+    /**
+     * On unmetered networks, warms the HTTP cache with the pages of the first [PREFETCH_PER_ROW] titles of every
+     * online row (TMDB / TVDB page JSON and the page poster), so that they open offline. Once per
+     * [PREFETCH_INTERVAL_MS]; cached responses cost nothing.
+     */
+    private fun prefetchDiscover(outcome: DiscoverOutcome) {
+        val now = System.currentTimeMillis()
+        if (now - prefetchedAt < PREFETCH_INTERVAL_MS || !com.example.trackstuff.data.remote.Network.isUnmetered()) return
+        prefetchedAt = now
+        scope.launch {
+            val s = settingsRepo.current()
+            val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
+            val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(PREFETCH_PER_ROW) }.distinctBy { it.ids to it.isSeries }
+            kotlinx.coroutines.coroutineScope {
+                items.map { r ->
+                    async {
+                        limit.withPermit {
+                            try {
+                                val d = when (r.source) {
+                                    DataSource.TMDB -> tmdb(s)?.let { api -> r.ids.tmdbId?.let { id -> if (r.isSeries) api.tv(id, s.language).toDetails(s.region) else api.movie(id, s.language).toDetails(s.region) } }
+                                    else -> tvdb(s)?.let { api -> r.ids.tvdbId?.let { id -> (if (r.isSeries) api.series(id) else api.movie(id)).data?.toDetails(r.isSeries, s.language) } }
+                                }
+                                d?.posterUrl?.let { url -> com.example.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().close() }
+                            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
     }
 
     /** Each source is independent: a missing key or a network error simply drops its rows and adds a message. */
@@ -837,6 +903,10 @@ class MetadataRepository(
         const val DISCOVER_MEMO_MS = 60 * 60 * 1000L
         /** Memo lifetime when a source failed for a non-configuration reason (network, server). */
         const val DISCOVER_RETRY_MS = 5 * 60 * 1000L
+        /** Page prefetch for offline use: titles per row, parallelism, and how often. */
+        const val PREFETCH_PER_ROW = 20
+        const val PREFETCH_CONCURRENCY = 3
+        const val PREFETCH_INTERVAL_MS = 12 * 60 * 60 * 1000L
         /** Problems that only change when the user edits Settings (as opposed to network or server errors). */
         fun isConfigProblem(p: String) = "not set" in p || "not imported" in p
         /** URL fragments of the chart endpoints, evicted from the HTTP cache on an explicit refresh. */
