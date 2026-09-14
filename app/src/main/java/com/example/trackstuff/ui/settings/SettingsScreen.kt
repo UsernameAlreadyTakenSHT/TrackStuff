@@ -118,6 +118,16 @@ fun SettingsScreen(vm: SettingsViewModel) {
                     Text(stringResource(R.string.settings_cache_used, formatBytes(state.cacheUsedBytes)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     TextButton(onClick = vm::clearCache) { Text(stringResource(R.string.settings_cache_clear)) }
                 }
+                // Every page of every online Discover row, for offline use.
+                val prefetch by vm.prefetch.collectAsStateWithLifecycle()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        prefetch?.let { (done, total) -> stringResource(R.string.discover_caching, done, total) } ?: stringResource(R.string.settings_cache_discover_hint),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+                    )
+                    if (prefetch == null) TextButton(onClick = vm::cacheDiscoverPages) { Text(stringResource(R.string.settings_cache_discover)) }
+                    else TextButton(onClick = vm::cancelCacheDiscoverPages) { Text(stringResource(R.string.cancel)) }
+                }
             }
 
             Section(stringResource(R.string.settings_databases), stringResource(R.string.settings_databases_hint)) {

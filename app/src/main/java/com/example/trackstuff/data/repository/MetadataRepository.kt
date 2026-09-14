@@ -224,16 +224,36 @@ class MetadataRepository(
      */
     private fun prefetchDiscover(outcome: DiscoverOutcome) {
         val now = System.currentTimeMillis()
-        if (now - prefetchedAt < PREFETCH_INTERVAL_MS) return
-        val perRow = if (com.example.trackstuff.data.remote.Network.isUnmetered()) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED
+        if (now - prefetchedAt < PREFETCH_INTERVAL_MS || prefetchJob?.isActive == true) return
         prefetchedAt = now
-        scope.launch {
-            val s = settingsRepo.current()
-            val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
-            val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(perRow) }.distinctBy { it.ids to it.isSeries }
-            val done = java.util.concurrent.atomic.AtomicInteger(0)
-            _prefetch.value = 0 to items.size
-            try {
+        val perRow = if (com.example.trackstuff.data.remote.Network.isUnmetered()) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED
+        prefetchJob = scope.launch { prefetchPages(outcome, perRow) }
+    }
+
+    @Volatile private var prefetchJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * "Cache Discover pages" button: every title of every online row (TMDB, TVDB), page and poster — around a
+     * thousand pages, a few minutes and ~100 MB the first time. Runs until done or [cancelPrefetch].
+     */
+    fun prefetchAllDiscover() {
+        if (prefetchJob?.isActive == true) return
+        prefetchJob = scope.launch {
+            val outcome = discoverMemo?.outcome ?: store.load() ?: discover()
+            prefetchPages(outcome, Int.MAX_VALUE)
+        }
+    }
+
+    fun cancelPrefetch() { prefetchJob?.cancel() }
+
+    /** Warms the HTTP cache with the page JSON and poster of the first [perRow] titles of every online row. */
+    private suspend fun prefetchPages(outcome: DiscoverOutcome, perRow: Int) {
+        val s = settingsRepo.current()
+        val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
+        val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(perRow) }.distinctBy { it.ids to it.isSeries }
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        _prefetch.value = 0 to items.size
+        try {
             kotlinx.coroutines.coroutineScope {
                 items.map { r ->
                     async {
@@ -250,8 +270,7 @@ class MetadataRepository(
                     }
                 }.awaitAll()
             }
-            } finally { _prefetch.value = null }
-        }
+        } finally { _prefetch.value = null }
     }
 
     /** Each source is independent: a missing key or a network error simply drops its rows and adds a message. */

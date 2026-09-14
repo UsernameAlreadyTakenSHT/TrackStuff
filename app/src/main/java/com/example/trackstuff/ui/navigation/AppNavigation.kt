@@ -137,7 +137,7 @@ fun AppNavigation() {
                     )
                 }
                 entry<SettingsKey> {
-                    val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, container.trakt, container.simkl, container.omdbOrg, container.imdb, container.sync, container.backup) })
+                    val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, container.trakt, container.simkl, container.omdbOrg, container.imdb, container.sync, container.backup, container.metadata) })
                     SettingsScreen(vm)
                 }
                 entry<DetailKey> { key ->

@@ -59,7 +59,14 @@ class SettingsViewModel(
     private val imdb: ImdbRepository,
     private val sync: com.example.trackstuff.data.sync.SyncCoordinator,
     private val backup: com.example.trackstuff.data.repository.LibraryBackup,
+    private val metadata: com.example.trackstuff.data.repository.MetadataRepository,
 ) : ViewModel() {
+    /** Discover page prefetch in progress (done to total), null when idle. */
+    val prefetch: StateFlow<Pair<Int, Int>?> = metadata.prefetchProgress
+
+    fun cacheDiscoverPages() = metadata.prefetchAllDiscover()
+    fun cancelCacheDiscoverPages() = metadata.cancelPrefetch()
+
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state
     val tokens: StateFlow<AuthTokens> = settingsRepo.tokens.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AuthTokens())

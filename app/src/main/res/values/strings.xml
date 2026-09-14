@@ -140,6 +140,8 @@
     <string name="settings_cache_unlimited">Unlimited</string>
     <string name="settings_cache_used">Used: %s</string>
     <string name="settings_cache_clear">Clear</string>
+    <string name="settings_cache_discover">Cache Discover</string>
+    <string name="settings_cache_discover_hint">Discover pages: every title of the TMDB and TVDB rows (about a thousand pages, ~100 MB the first time), for offline use.</string>
     <string name="settings_databases">Databases</string>
     <string name="settings_databases_hint">Posters, synopses, search and discover. Order: TMDB, then TVDB, then OMDb API, then IMDb datasets, then omdb.org.</string>
     <string name="settings_tmdb_key">API key (v3) or read access token (v4)</string>
