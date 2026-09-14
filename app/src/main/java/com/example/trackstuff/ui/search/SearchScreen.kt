@@ -23,6 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.TextButton
 import com.example.trackstuff.data.repository.MetadataRepository
 import androidx.compose.material3.TopAppBar
@@ -61,6 +65,11 @@ fun SearchScreen(vm: SearchViewModel, onOpenLocal: (Long) -> Unit, onOpenRemote:
                 keyboardActions = KeyboardActions(onSearch = { vm.search(); keyboard?.hide() }),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
+            // Source: automatic cascade, or one database only.
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = state.only == null, onClick = { vm.setSource(null) }, label = { Text(stringResource(R.string.search_source_auto)) })
+                MetadataRepository.SEARCH_ORDER.forEach { s -> FilterChip(selected = state.only == s, onClick = { vm.setSource(s) }, label = { Text(s.label) }) }
+            }
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
 
             state.source?.let {

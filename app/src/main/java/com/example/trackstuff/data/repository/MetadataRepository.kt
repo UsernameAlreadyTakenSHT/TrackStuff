@@ -97,91 +97,60 @@ class MetadataRepository(
 
     // ------------------------------------------------------------------ Search
 
-    suspend fun search(query: String): SearchOutcome {
+    /**
+     * Search. With [only] null, the sources are tried in order (TMDB, TVDB, OMDb API, IMDb datasets,
+     * omdb.org) and the first one with results wins; with a source, only that one is queried.
+     */
+    suspend fun search(query: String, only: DataSource? = null): SearchOutcome {
         val s = settingsRepo.current()
         val problems = mutableListOf<String>()
-
-        // 1. TMDB
-        try {
-            val api = tmdb(s)
-            if (api == null) problems += "TMDB: API key not set"
-            else {
-                val results = api.searchMulti(query, s.language).results
-                    .filter { it.mediaType == "movie" || it.mediaType == "tv" }
-                    .map { it.toSummary() }
-                if (results.isNotEmpty()) return SearchOutcome(results, DataSource.TMDB, problems)
+        for (source in (if (only != null) listOf(only) else SEARCH_ORDER)) {
+            try {
+                val results = searchOne(source, query, s, problems)
+                if (results.isNotEmpty()) return SearchOutcome(results, source, problems)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "${source.label} search failed", e); problems += "${source.label}: ${errMsg(e)}"
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "TMDB search failed", e); problems += "TMDB: ${errMsg(e)}"
         }
-
-        // 2. TVDB
-        try {
-            val api = tvdb(s)
-            if (api == null) problems += "TVDB: API key not set"
-            else {
-                val results = (api.search(query).data ?: emptyList())
-                    .filter { it.type == "series" || it.type == "movie" }
-                    .map { it.toSummary(s.language) }
-                if (results.isNotEmpty()) return SearchOutcome(results, DataSource.TVDB, problems)
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "TVDB search failed", e); problems += "TVDB: ${errMsg(e)}"
-        }
-
-        // 3. OMDb API (affiches Amazon, titres anglais)
-        try {
-            if (!s.hasOmdb) problems += "OMDb API: key not set"
-            else {
-                val r = omdb.search(s.omdbApiKey, query)
-                val results = r.search.filter { it.type == "movie" || it.type == "series" }.map {
-                    MediaSummary(
-                        ids = ExternalIds(imdbId = it.imdbId),
-                        isSeries = it.type == "series",
-                        title = it.title,
-                        year = it.year?.take(4)?.toIntOrNull(),
-                        posterUrl = it.poster?.takeIf { p -> p.startsWith("http") },
-                        source = DataSource.OMDB,
-                    )
-                }
-                if (results.isNotEmpty()) return SearchOutcome(results, DataSource.OMDB, problems)
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "OMDb search failed", e); problems += "OMDb API: ${errMsg(e)}"
-        }
-
-        // 4. IMDb datasets (offline, ahead of omdb.org): titles, plus translated titles in Full mode
-        try {
-            if (imdb.isAvailable()) {
-                val results = imdb.search(query)
-                if (results.isNotEmpty()) return SearchOutcome(results, DataSource.IMDB, problems)
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "IMDb search failed", e); problems += "IMDb: ${errMsg(e)}"
-        }
-
-        // 5. omdb.org (imported local database, works offline)
-        try {
-            if (!omdbOrg.isAvailable()) problems += "omdb.org: database not imported (Settings)"
-            else {
-                val results = omdbOrg.search(query, s.language)
-                if (results.isNotEmpty()) return SearchOutcome(results, DataSource.OMDB_ORG, problems)
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "omdb.org search failed", e); problems += "omdb.org: ${errMsg(e)}"
-        }
-
         return SearchOutcome(emptyList(), null, problems)
+    }
+
+    /** One source; an unconfigured source adds a problem and returns nothing. */
+    private suspend fun searchOne(source: DataSource, query: String, s: AppSettings, problems: MutableList<String>): List<MediaSummary> = when (source) {
+        DataSource.TMDB -> {
+            val api = tmdb(s)
+            if (api == null) { problems += "TMDB: API key not set"; emptyList() }
+            else api.searchMulti(query, s.language).results.filter { it.mediaType == "movie" || it.mediaType == "tv" }.map { it.toSummary() }
+        }
+        DataSource.TVDB -> {
+            val api = tvdb(s)
+            if (api == null) { problems += "TVDB: API key not set"; emptyList() }
+            else (api.search(query).data ?: emptyList()).filter { it.type == "series" || it.type == "movie" }.map { it.toSummary(s.language) }
+        }
+        DataSource.OMDB -> {
+            if (!s.hasOmdb) { problems += "OMDb API: key not set"; emptyList() }
+            else omdb.search(s.omdbApiKey, query).search.filter { it.type == "movie" || it.type == "series" }.map {
+                MediaSummary(
+                    ids = ExternalIds(imdbId = it.imdbId),
+                    isSeries = it.type == "series",
+                    title = it.title,
+                    year = it.year?.take(4)?.toIntOrNull(),
+                    posterUrl = it.poster?.takeIf { p -> p.startsWith("http") },
+                    source = DataSource.OMDB,
+                )
+            }
+        }
+        DataSource.IMDB -> {
+            if (!imdb.isAvailable()) { problems += "IMDb: datasets not imported (Settings)"; emptyList() }
+            else imdb.search(query)
+        }
+        DataSource.OMDB_ORG -> {
+            if (!omdbOrg.isAvailable()) { problems += "omdb.org: database not imported (Settings)"; emptyList() }
+            else omdbOrg.search(query, s.language)
+        }
+        else -> emptyList()
     }
 
     // ------------------------------------------------------------------ Discover (popular / trending)
@@ -857,6 +826,8 @@ class MetadataRepository(
         const val ROW_SIZE = 100
         const val TMDB_PAGES = ROW_SIZE / 20 + 2
         /** Discover rows are kept in memory this long; the HTTP cache (24 h) covers the rest. */
+        /** Search sources, in cascade order. */
+        val SEARCH_ORDER = listOf(DataSource.TMDB, DataSource.TVDB, DataSource.OMDB, DataSource.IMDB, DataSource.OMDB_ORG)
         /** Page URLs recognised by [resolveLink]. */
         val LINK_IMDB = Regex("""imdb\.com/title/(tt\d+)""")
         val LINK_TMDB = Regex("""themoviedb\.org/(movie|tv)/(\d+)""")

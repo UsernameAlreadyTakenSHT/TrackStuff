@@ -23,6 +23,8 @@ data class SearchUiState(
     /** Results already in the library → local id. */
     val inLibrary: Map<MediaSummary, Long> = emptyMap(),
     val searched: Boolean = false,
+    /** Source to query; null = automatic cascade (first source with results). */
+    val only: DataSource? = null,
 )
 
 class SearchViewModel(private val metadata: MetadataRepository, private val library: LibraryRepository) : ViewModel() {
@@ -44,6 +46,13 @@ class SearchViewModel(private val metadata: MetadataRepository, private val libr
         }
     }
 
+    /** Source chip: re-runs the current query on that source (null = automatic). */
+    fun setSource(only: DataSource?) {
+        if (_state.value.only == only) return
+        _state.update { it.copy(only = only) }
+        search()
+    }
+
     fun search() {
         val q = _state.value.query.trim()
         if (q.length < MIN_QUERY) return
@@ -51,7 +60,7 @@ class SearchViewModel(private val metadata: MetadataRepository, private val libr
         job = viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             val outcome = try {
-                metadata.search(q)
+                metadata.search(q, _state.value.only)
             } catch (e: Exception) {
                 com.example.trackstuff.data.repository.SearchOutcome(emptyList(), null, listOf(describeError(e)))
             }

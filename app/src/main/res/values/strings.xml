@@ -56,6 +56,7 @@
     <string name="search_title">Search</string>
     <string name="search_placeholder">Movie, series, documentary, anime…</string>
     <string name="search_clear">Clear</string>
+    <string name="search_source_auto">Auto</string>
     <string name="search_results_via">Results via %s</string>
     <string name="search_no_results">No results.</string>
     <string name="search_hint">Search for a title to add it to your library.\nSources: TMDB, then TVDB, then OMDb API, then IMDb and omdb.org (offline).</string>
