@@ -64,7 +64,13 @@ class SettingsViewModel(
     /** Discover page prefetch in progress (done to total), null when idle. */
     val prefetch: StateFlow<Pair<Int, Int>?> = metadata.prefetchProgress
 
-    fun cacheDiscoverPages() = metadata.prefetchAllDiscover()
+    /** "Cache Discover" button: at most once an hour (the same limiter as the refresh actions). */
+    fun cacheDiscoverPages() {
+        val wait = com.example.trackstuff.data.remote.RefreshLimiter.waitMinutes("cache-discover")
+        if (wait != null) { _state.update { it.copy(backupMessageRes = R.string.refresh_wait, backupMessageArg = wait.toString()) }; return }
+        com.example.trackstuff.data.remote.RefreshLimiter.tryAcquire("cache-discover")
+        metadata.prefetchAllDiscover()
+    }
     fun cancelCacheDiscoverPages() = metadata.cancelPrefetch()
 
     private val _state = MutableStateFlow(SettingsUiState())
