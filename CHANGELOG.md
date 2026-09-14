@@ -1,9 +1,5 @@
 # Changelog
 
-All releases are published on GitHub with a signed APK (same key throughout, so each version
-installs over the previous one). The APK ships without any API key: enter yours in Settings or
-import a settings file.
-
 ## v0.1.7 — 2026-09-14
 
 - **Settings → Cache → "Cache Discover"**: caches the page and poster of every title of every TMDB and TVDB Discover row (about a thousand pages, ~150 MB the first time; already-cached pages are not downloaded again). Progress line and Cancel; at most once an hour.
@@ -64,4 +60,4 @@ import a settings file.
 
 ## v0.1.0 — 2026-09-12
 
-First release. Enter your API keys in Settings (TMDB, TVDB, OMDb API, Trakt, Simkl). Installable with Obtainium from this repository.
+First release.
