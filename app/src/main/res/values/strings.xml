@@ -162,7 +162,7 @@
     <string name="settings_imdb_standard">Standard (~280 MB)</string>
     <string name="settings_imdb_full">Full (~1.9 GB)</string>
     <string name="settings_imdb_hint">Official IMDb datasets, once a month at most (Wi-Fi recommended). Standard: ratings and vote counts, episodes per season, offline Top 250.</string>
-    <string name="settings_imdb_hint_full">Full: everything from Standard plus cast and roles, directors and writers, translated titles — all offline. Import takes 30–45 minutes.</string>
+    <string name="settings_imdb_hint_full">Full: everything from Standard plus cast and roles, directors and writers, translated titles — all offline. Import takes 5–10 minutes on a recent phone (longer on an old one).</string>
     <string name="settings_import_interrupted">The last import was interrupted: the local data is incomplete and not used until you run the update again.</string>
     <string name="settings_imdb_outdated">This version of the app extracts more from the datasets (series creators): an update is allowed now, before the monthly limit.</string>
     <string name="settings_imdb_done">Import complete: %1$d titles.</string>
