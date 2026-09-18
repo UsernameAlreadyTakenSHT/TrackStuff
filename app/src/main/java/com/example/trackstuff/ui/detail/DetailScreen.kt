@@ -246,7 +246,8 @@ private fun DetailContent(d: MediaDetails, item: LibraryItem?, refreshing: Boole
         val sources = listOfNotNull(
             d.posterSource?.let { stringResource(R.string.source_poster, it.label) },
             d.overviewSource?.let { stringResource(R.string.source_overview, it.label) },
-            if (d.ratings.imdb != null || d.ratings.rottenTomatoes != null || d.ratings.metacritic != null) stringResource(R.string.source_ratings) else null,
+            d.ratingsSource?.takeIf { d.ratings.hasExternal }?.let { stringResource(R.string.source_ratings, it.label) },
+            d.creditsSource?.takeIf { !d.credits.isEmpty }?.let { stringResource(R.string.source_credits, it.label) },
         )
         if (sources.isNotEmpty()) {
             Text(stringResource(R.string.detail_sources, sources.joinToString(", ")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))

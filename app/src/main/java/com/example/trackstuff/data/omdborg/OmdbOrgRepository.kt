@@ -319,6 +319,7 @@ class OmdbOrgRepository(
             countries = e.countries.split(',').filter { it.isNotBlank() }.map { com.example.trackstuff.data.repository.MetadataRepository.countryName(it) },
             posterSource = if (e.posterUrl != null) DataSource.OMDB_ORG else null,
             overviewSource = if (overview != null) DataSource.OMDB_ORG else null,
+            creditsSource = DataSource.OMDB_ORG,
         )
     }
 

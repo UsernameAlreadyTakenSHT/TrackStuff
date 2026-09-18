@@ -83,7 +83,10 @@ data class Ratings(
     val imdbVotes: Int? = null,
     val rottenTomatoes: Int? = null,
     val metacritic: Int? = null,
-)
+) {
+    /** True when at least one of the external ratings (IMDb, RT, Metacritic) is known. */
+    val hasExternal: Boolean get() = imdb != null || rottenTomatoes != null || metacritic != null
+}
 
 /** An actor and their role. */
 data class CastMember(val name: String, val character: String? = null)
@@ -125,6 +128,9 @@ data class MediaDetails(
     val credits: Credits = Credits(),
     val posterSource: DataSource?,
     val overviewSource: DataSource?,
+    /** Where the IMDb / Rotten Tomatoes / Metacritic ratings and the credits came from (null = none). */
+    val ratingsSource: DataSource? = null,
+    val creditsSource: DataSource? = null,
     val certification: String? = null,
     val status: String? = null,
     /** Release date (movie) or first-air date (series), ISO yyyy-MM-dd. */
@@ -195,6 +201,8 @@ fun MediaDetails.fillMissingFrom(other: MediaDetails) = copy(
     overviewSource = if (!overview.isNullOrBlank()) overviewSource else other.overviewSource,
     posterUrl = posterUrl ?: other.posterUrl,
     posterSource = if (posterUrl != null) posterSource else other.posterSource,
+    ratingsSource = if (ratings.hasExternal) ratingsSource else other.ratingsSource,
+    creditsSource = if (!credits.isEmpty) creditsSource else other.creditsSource,
     backdropUrl = backdropUrl ?: other.backdropUrl,
     genres = genres.ifEmpty { other.genres },
     runtimeMinutes = runtimeMinutes ?: other.runtimeMinutes,

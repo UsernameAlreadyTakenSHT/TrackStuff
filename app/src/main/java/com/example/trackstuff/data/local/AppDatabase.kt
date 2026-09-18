@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /** The user's library. */
-@Database(entities = [MediaEntity::class, EpisodeEntity::class], version = 11, exportSchema = false)
+@Database(entities = [MediaEntity::class, EpisodeEntity::class], version = 12, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
     abstract fun episodeDao(): EpisodeDao
@@ -64,9 +64,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Sources of the ratings and credits shown on the page. */
+        private val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN ratingsSource TEXT")
+                db.execSQL("ALTER TABLE media ADD COLUMN creditsSource TEXT")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "trackstuff.db")
-                .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

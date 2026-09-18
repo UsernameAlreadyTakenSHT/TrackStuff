@@ -105,7 +105,8 @@
     <string name="detail_sources">Sources — %s</string>
     <string name="source_poster">poster: %s</string>
     <string name="source_overview">description: %s</string>
-    <string name="source_ratings">ratings: OMDb API</string>
+    <string name="source_ratings">ratings: %s</string>
+    <string name="source_credits">credits: %s</string>
     <string name="detail_tracking">My tracking</string>
     <string name="detail_episodes_title">Episodes</string>
     <string name="detail_watch">Where to watch (%s)</string>

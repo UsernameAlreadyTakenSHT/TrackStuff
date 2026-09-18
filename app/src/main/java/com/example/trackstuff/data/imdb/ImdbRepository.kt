@@ -358,6 +358,8 @@ class ImdbRepository(
             seasonEpisodes = seasons,
             posterSource = null,
             overviewSource = null,
+            ratingsSource = DataSource.IMDB,
+            creditsSource = DataSource.IMDB,
         )
     }
 
