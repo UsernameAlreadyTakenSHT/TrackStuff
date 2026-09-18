@@ -149,6 +149,7 @@ private object Keys {
     val TRAKT_ACTIVITIES = stringPreferencesKey("trakt_activities")
     val SIMKL_REMOVED = stringPreferencesKey("simkl_removed_stamp")
     val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
+    val PREFETCH_AT = longPreferencesKey("discover_prefetch_at")
     val SYNC_PRIMARY = stringPreferencesKey("sync_primary")
     val PENDING_REMOVALS = stringPreferencesKey("pending_removals")
     val REFRESH_LIMITS = stringPreferencesKey("refresh_limits")
@@ -280,6 +281,14 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun addPendingRemoval(r: com.example.trackstuff.data.sync.PendingRemoval) = setPendingRemovals(pendingRemovals() + r)
+
+    // ---- Discover page prefetch (once every 12 h, across restarts)
+
+    suspend fun prefetchedAt(): Long = context.dataStore.data.first()[Keys.PREFETCH_AT] ?: 0L
+
+    suspend fun savePrefetchedAt(at: Long) {
+        context.dataStore.edit { p -> p[Keys.PREFETCH_AT] = at }
+    }
 
     suspend fun saveLastSyncAt(at: Long) {
         context.dataStore.edit { p -> p[Keys.LAST_SYNC_AT] = at }

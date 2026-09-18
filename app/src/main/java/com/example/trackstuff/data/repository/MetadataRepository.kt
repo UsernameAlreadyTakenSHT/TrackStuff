@@ -198,6 +198,9 @@ class MetadataRepository(
         return outcome
     }
 
+    /** Last known rows without any network: the memo, else the saved file. Shown at once while a load runs. */
+    suspend fun savedDiscover(): DiscoverOutcome? = discoverMemo?.outcome ?: store.load()
+
     /** Saved Discover rows (JSON file), so that the tab still shows something offline after the HTTP cache was evicted. */
     private val store = object {
         private val adapter by lazy { com.example.trackstuff.data.remote.Network.moshi.adapter(DiscoverOutcome::class.java) }
@@ -211,7 +214,6 @@ class MetadataRepository(
         }
     }
 
-    @Volatile private var prefetchedAt = 0L
 
     /** Progress of the running page prefetch (done to total), null when idle: shown on the Discover screen. */
     private val _prefetch = kotlinx.coroutines.flow.MutableStateFlow<Pair<Int, Int>?>(null)
@@ -223,11 +225,15 @@ class MetadataRepository(
      * [PREFETCH_INTERVAL_MS]; cached responses cost nothing.
      */
     private fun prefetchDiscover(outcome: DiscoverOutcome) {
-        val now = System.currentTimeMillis()
-        if (now - prefetchedAt < PREFETCH_INTERVAL_MS || prefetchJob?.isActive == true) return
-        prefetchedAt = now
-        val perRow = if (com.example.trackstuff.data.remote.Network.isUnmetered()) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED
-        prefetchJob = scope.launch { prefetchPages(outcome, perRow) }
+        if (prefetchJob?.isActive == true) return
+        prefetchJob = scope.launch {
+            // The timestamp is persisted: a cold start must not walk the 200 pages again (all cache hits, but visible).
+            val now = System.currentTimeMillis()
+            if (now - settingsRepo.prefetchedAt() < PREFETCH_INTERVAL_MS) return@launch
+            settingsRepo.savePrefetchedAt(now)
+            val perRow = if (com.example.trackstuff.data.remote.Network.isUnmetered()) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED
+            prefetchPages(outcome, perRow)
+        }
     }
 
     @Volatile private var prefetchJob: kotlinx.coroutines.Job? = null

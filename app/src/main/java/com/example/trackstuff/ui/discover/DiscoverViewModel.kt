@@ -30,6 +30,8 @@ data class DiscoverUiState(
     val media: MediaFilter = MediaFilter.MOVIES,
     /** Minutes to wait before the next forced refresh; set when the button is tapped too soon. */
     val refreshWaitMinutes: Long? = null,
+    /** True during an explicit refresh (button, pull): drives the pull-to-refresh indicator only. */
+    val refreshing: Boolean = false,
 )
 
 /**
@@ -117,7 +119,9 @@ class DiscoverViewModel(private val metadata: MetadataRepository, library: Libra
 
     private fun load(force: Boolean) {
         viewModelScope.launch {
-            _state.update { it.copy(loading = true) }
+            _state.update { it.copy(loading = true, refreshing = force) }
+            // Cold start: the saved rows appear at once, the fresh ones replace them when the load ends.
+            if (!force && _state.value.sections.isEmpty()) metadata.savedDiscover()?.let { saved -> _state.update { it.copy(sections = saved.sections) } }
             val outcome = try {
                 metadata.discover(force)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -129,7 +133,7 @@ class DiscoverViewModel(private val metadata: MetadataRepository, library: Libra
             val available = outcome.sections.map { it.source }.distinct()
             _state.update { st ->
                 st.copy(
-                    loading = false, sections = outcome.sections, problems = outcome.problems,
+                    loading = false, refreshing = false, sections = outcome.sections, problems = outcome.problems,
                     source = if (st.source in available || available.isEmpty()) st.source else available.first(),
                 )
             }

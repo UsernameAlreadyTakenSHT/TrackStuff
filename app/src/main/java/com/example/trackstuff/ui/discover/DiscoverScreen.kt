@@ -134,7 +134,7 @@ fun DiscoverScreen(vm: DiscoverViewModel, onOpenLocal: (Long) -> Unit, onOpenRem
                     }
                 }
                 // Pull down: same as the refresh button (once an hour at most).
-                else -> PullToRefreshBox(isRefreshing = state.loading, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
+                else -> PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         rows.forEach { row ->
                             item(key = row.key) {
