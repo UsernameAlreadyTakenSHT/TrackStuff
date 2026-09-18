@@ -84,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
  * Imported omdb.org database, deliberately separate: a schema change of the library
  * must never wipe the ~12 MB of dumps (downloadable at most once a month).
  */
-@Database(entities = [OmdbTitleEntity::class, OmdbAliasEntity::class, OmdbCastEntity::class], version = 4, exportSchema = false)
+@Database(entities = [OmdbTitleEntity::class, OmdbAliasEntity::class, OmdbCastEntity::class, OmdbTitleFts::class, OmdbAliasFts::class], version = 5, exportSchema = false)
 abstract class OmdbOrgDatabase : RoomDatabase() {
     abstract fun omdbOrgDao(): OmdbOrgDao
 
@@ -96,6 +96,16 @@ abstract class OmdbOrgDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE omdb_title ADD COLUMN voteCount INTEGER")
             }
         }
+        /** Full-text search tables, filled from the existing rows (no re-import). */
+        private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `omdb_title_fts` USING FTS4(`nameNorm` TEXT NOT NULL, `id` INTEGER NOT NULL, notindexed=`id`)")
+                db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `omdb_alias_fts` USING FTS4(`nameNorm` TEXT NOT NULL, `titleId` INTEGER NOT NULL, notindexed=`titleId`)")
+                db.execSQL("INSERT INTO omdb_title_fts(nameNorm, id) SELECT nameNorm, id FROM omdb_title")
+                db.execSQL("INSERT INTO omdb_alias_fts(nameNorm, titleId) SELECT nameNorm, titleId FROM omdb_alias")
+            }
+        }
+
         private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE omdb_alias ADD COLUMN official INTEGER NOT NULL DEFAULT 0")
@@ -104,7 +114,7 @@ abstract class OmdbOrgDatabase : RoomDatabase() {
 
         fun build(context: Context): OmdbOrgDatabase =
             Room.databaseBuilder(context, OmdbOrgDatabase::class.java, "omdb_org.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

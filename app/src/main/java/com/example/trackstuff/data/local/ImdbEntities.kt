@@ -70,6 +70,19 @@ data class ImdbAliasEntity(
 @Entity(tableName = "imdb_poster")
 data class ImdbPosterEntity(@PrimaryKey val imdbId: String, val url: String, val checkedAt: Long)
 
+/**
+ * Full-text index of the titles (and aliases below) for the offline search: a MATCH on token prefixes
+ * ("break* bad*") answers in milliseconds whatever the position of the word, where LIKE '%…%' scanned the
+ * whole table. Filled by the importer alongside the main tables; [imdbId] is stored, not indexed.
+ */
+@androidx.room.Fts4(notIndexed = ["imdbId"])
+@Entity(tableName = "imdb_title_fts")
+data class ImdbTitleFts(val nameNorm: String, val imdbId: String)
+
+@androidx.room.Fts4(notIndexed = ["tconst"])
+@Entity(tableName = "imdb_alias_fts")
+data class ImdbAliasFts(val nameNorm: String, val tconst: String)
+
 data class ImdbVotes(val imdbId: String, val votes: Int)
 
 /** Credit row joined with the name. */
@@ -98,32 +111,6 @@ interface ImdbDao {
     )
     suspend fun top(isSeries: Boolean, minVotes: Int, mean: Double, limit: Int): List<ImdbTitleEntity>
 
-    /**
-     * Titles (or aliases) starting with the query. [glob] is the normalized query followed by `*`: a GLOB
-     * with a bound, wildcard-free prefix uses the `nameNorm` indexes (a range scan), unlike `LIKE '%…%'`.
-     */
-    @Query(
-        """
-        SELECT * FROM imdb_title WHERE nameNorm GLOB :glob
-            OR imdbId IN (SELECT tconst FROM imdb_alias WHERE nameNorm GLOB :glob)
-        ORDER BY votes DESC LIMIT :limit
-        """
-    )
-    suspend fun searchPrefix(glob: String, limit: Int): List<ImdbTitleEntity>
-
-    /**
-     * Titles containing the query anywhere: a scan of the title table only (a few hundred thousand rows),
-     * used when the prefix search finds little. Aliases are prefix-only: scanning millions of alias rows
-     * (Full datasets) took many seconds on a phone.
-     */
-    @Query(
-        """
-        SELECT * FROM imdb_title WHERE nameNorm LIKE '%' || :q || '%'
-            AND imdbId NOT IN (:exclude)
-        ORDER BY votes DESC LIMIT :limit
-        """
-    )
-    suspend fun searchContains(q: String, exclude: List<String>, limit: Int): List<ImdbTitleEntity>
 
     @Query("SELECT episodes FROM imdb_season WHERE seriesId = :seriesId AND season >= 1 ORDER BY season")
     suspend fun seasons(seriesId: String): List<Int>
@@ -152,17 +139,45 @@ interface ImdbDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertSeasons(rows: List<ImdbSeasonEntity>)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertCrew(rows: List<ImdbCrewEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPersons(rows: List<ImdbPersonEntity>)
-    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAliases(rows: List<ImdbAliasEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAliasRows(rows: List<ImdbAliasEntity>)
+    @Insert suspend fun insertAliasFts(rows: List<ImdbAliasFts>)
+    @Query("DELETE FROM imdb_alias_fts") suspend fun clearAliasFts()
+
+    /** Aliases and their full-text rows, together. */
+    @androidx.room.Transaction
+    suspend fun insertAliases(rows: List<ImdbAliasEntity>) {
+        insertAliasRows(rows)
+        insertAliasFts(rows.map { ImdbAliasFts(it.nameNorm, it.tconst) })
+    }
     @Query("DELETE FROM imdb_season") suspend fun clearSeasons()
     @Query("DELETE FROM imdb_crew") suspend fun clearCrew()
     @Query("DELETE FROM imdb_person") suspend fun clearPersons()
-    @Query("DELETE FROM imdb_alias") suspend fun clearAliases()
+    @Query("DELETE FROM imdb_alias") suspend fun clearAliasRows()
+    @androidx.room.Transaction suspend fun clearAliases() { clearAliasRows(); clearAliasFts() }
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(titles: List<ImdbTitleEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTitleRows(titles: List<ImdbTitleEntity>)
+    @Insert suspend fun insertTitleFts(rows: List<ImdbTitleFts>)
+    @Query("DELETE FROM imdb_title_fts") suspend fun clearTitleFts()
+    @Query("DELETE FROM imdb_title") suspend fun clearTitleRows()
 
-    @Query("DELETE FROM imdb_title")
-    suspend fun clear()
+    /** Titles and their full-text rows, together (the importer always clears before inserting). */
+    @androidx.room.Transaction
+    suspend fun insertAll(titles: List<ImdbTitleEntity>) {
+        insertTitleRows(titles)
+        insertTitleFts(titles.map { ImdbTitleFts(it.nameNorm, it.imdbId) })
+    }
+
+    @androidx.room.Transaction suspend fun clear() { clearTitleRows(); clearTitleFts() }
+
+    /** Full-text search: [match] is an FTS query such as `break* bad*`; titles and aliases, most voted first. */
+    @Query(
+        """
+        SELECT * FROM imdb_title WHERE imdbId IN (SELECT imdbId FROM imdb_title_fts WHERE imdb_title_fts MATCH :match)
+            OR imdbId IN (SELECT tconst FROM imdb_alias_fts WHERE imdb_alias_fts MATCH :match)
+        ORDER BY votes DESC LIMIT :limit
+        """
+    )
+    suspend fun searchFts(match: String, limit: Int): List<ImdbTitleEntity>
 
     @Query("SELECT * FROM imdb_poster WHERE imdbId = :imdbId")
     suspend fun poster(imdbId: String): ImdbPosterEntity?
@@ -172,7 +187,7 @@ interface ImdbDao {
 }
 
 /** Separate IMDb database, like omdb.org: never touched by the library migrations. */
-@Database(entities = [ImdbTitleEntity::class, ImdbSeasonEntity::class, ImdbCrewEntity::class, ImdbPersonEntity::class, ImdbAliasEntity::class, ImdbPosterEntity::class], version = 4, exportSchema = false)
+@Database(entities = [ImdbTitleEntity::class, ImdbSeasonEntity::class, ImdbCrewEntity::class, ImdbPersonEntity::class, ImdbAliasEntity::class, ImdbPosterEntity::class, ImdbTitleFts::class, ImdbAliasFts::class], version = 5, exportSchema = false)
 abstract class ImdbDatabase : RoomDatabase() {
     abstract fun imdbDao(): ImdbDao
 
@@ -185,6 +200,16 @@ abstract class ImdbDatabase : RoomDatabase() {
         }
 
         /** Adds the resolved-poster table. */
+        /** Full-text search tables, filled from the existing rows (no re-import; a minute or two on Full datasets). */
+        private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `imdb_title_fts` USING FTS4(`nameNorm` TEXT NOT NULL, `imdbId` TEXT NOT NULL, notindexed=`imdbId`)")
+                db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `imdb_alias_fts` USING FTS4(`nameNorm` TEXT NOT NULL, `tconst` TEXT NOT NULL, notindexed=`tconst`)")
+                db.execSQL("INSERT INTO imdb_title_fts(nameNorm, imdbId) SELECT nameNorm, imdbId FROM imdb_title")
+                db.execSQL("INSERT INTO imdb_alias_fts(nameNorm, tconst) SELECT nameNorm, tconst FROM imdb_alias")
+            }
+        }
+
         private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `imdb_poster` (`imdbId` TEXT NOT NULL, `url` TEXT NOT NULL, `checkedAt` INTEGER NOT NULL, PRIMARY KEY(`imdbId`))")
@@ -193,7 +218,7 @@ abstract class ImdbDatabase : RoomDatabase() {
 
         fun build(context: Context): ImdbDatabase =
             Room.databaseBuilder(context, ImdbDatabase::class.java, "imdb.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }

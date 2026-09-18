@@ -64,6 +64,15 @@ data class OmdbAliasEntity(
     val official: Int = 0,
 )
 
+/** Full-text rows for the offline search (see ImdbTitleFts): [id] / [titleId] are stored, not indexed. */
+@androidx.room.Fts4(notIndexed = ["id"])
+@Entity(tableName = "omdb_title_fts")
+data class OmdbTitleFts(val nameNorm: String, val id: Int)
+
+@androidx.room.Fts4(notIndexed = ["titleId"])
+@Entity(tableName = "omdb_alias_fts")
+data class OmdbAliasFts(val nameNorm: String, val titleId: Int)
+
 @Dao
 interface OmdbOrgDao {
     @Query("SELECT COUNT(*) FROM omdb_title")
@@ -75,32 +84,6 @@ interface OmdbOrgDao {
     @Query("SELECT * FROM omdb_title WHERE imdbId = :imdbId LIMIT 1")
     suspend fun byImdb(imdbId: String): OmdbTitleEntity?
 
-    /**
-     * Titles (or aliases) starting with the query; exact matches first. [glob] is the normalized query
-     * followed by `*`: a GLOB with a bound, wildcard-free prefix uses the `nameNorm` indexes, unlike `LIKE '%…%'`.
-     */
-    @Query(
-        """
-        SELECT * FROM omdb_title WHERE id IN (
-            SELECT id FROM omdb_title WHERE nameNorm GLOB :glob
-            UNION
-            SELECT titleId FROM omdb_alias WHERE nameNorm GLOB :glob
-        )
-        ORDER BY (nameNorm = :q) DESC, (year IS NULL) ASC, year DESC
-        LIMIT :limit
-        """
-    )
-    suspend fun searchPrefix(q: String, glob: String, limit: Int): List<OmdbTitleEntity>
-
-    /** Titles containing the query anywhere: a scan of the title table only (aliases are prefix-only, see [searchPrefix]). */
-    @Query(
-        """
-        SELECT * FROM omdb_title WHERE nameNorm LIKE '%' || :q || '%' AND id NOT IN (:exclude)
-        ORDER BY (year IS NULL) ASC, year DESC
-        LIMIT :limit
-        """
-    )
-    suspend fun searchContains(q: String, exclude: List<Int>, limit: Int): List<OmdbTitleEntity>
 
     /** Exact title (or exact alias), optionally filtered by year ±1 and by type. */
     @Query(
@@ -119,11 +102,36 @@ interface OmdbOrgDao {
     @Query("SELECT name FROM omdb_alias WHERE titleId = :titleId AND language = :language ORDER BY official DESC LIMIT 1")
     suspend fun localizedName(titleId: Int, language: String): String?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTitles(titles: List<OmdbTitleEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTitleRows(titles: List<OmdbTitleEntity>)
+    @Insert suspend fun insertTitleFts(rows: List<OmdbTitleFts>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAliasRows(aliases: List<OmdbAliasEntity>)
+    @Insert suspend fun insertAliasFts(rows: List<OmdbAliasFts>)
+    @Query("DELETE FROM omdb_title_fts") suspend fun clearTitleFts()
+    @Query("DELETE FROM omdb_alias_fts") suspend fun clearAliasFts()
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertAliases(aliases: List<OmdbAliasEntity>)
+    /** Titles / aliases and their full-text rows, together (the importer always clears before inserting). */
+    @androidx.room.Transaction
+    suspend fun insertTitles(titles: List<OmdbTitleEntity>) {
+        insertTitleRows(titles)
+        insertTitleFts(titles.map { OmdbTitleFts(it.nameNorm, it.id) })
+    }
+
+    @androidx.room.Transaction
+    suspend fun insertAliases(aliases: List<OmdbAliasEntity>) {
+        insertAliasRows(aliases)
+        insertAliasFts(aliases.map { OmdbAliasFts(it.nameNorm, it.titleId) })
+    }
+
+    /** Full-text search: [match] is an FTS query such as `break* bad*`; exact titles first, then newest. */
+    @Query(
+        """
+        SELECT * FROM omdb_title WHERE id IN (SELECT id FROM omdb_title_fts WHERE omdb_title_fts MATCH :match)
+            OR id IN (SELECT titleId FROM omdb_alias_fts WHERE omdb_alias_fts MATCH :match)
+        ORDER BY (nameNorm = :q) DESC, (year IS NULL) ASC, year DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun searchFts(q: String, match: String, limit: Int): List<OmdbTitleEntity>
 
     /** Titles most voted by the omdb.org community. */
     @Query("SELECT * FROM omdb_title WHERE isSeries = :isSeries AND voteCount IS NOT NULL AND imageId IS NOT NULL ORDER BY voteCount DESC, voteAvg DESC LIMIT :limit")
@@ -145,11 +153,10 @@ interface OmdbOrgDao {
     @Query("DELETE FROM omdb_cast")
     suspend fun clearCast()
 
-    @Query("DELETE FROM omdb_title")
-    suspend fun clearTitles()
-
-    @Query("DELETE FROM omdb_alias")
-    suspend fun clearAliases()
+    @Query("DELETE FROM omdb_title") suspend fun clearTitleRows()
+    @Query("DELETE FROM omdb_alias") suspend fun clearAliasRows()
+    @androidx.room.Transaction suspend fun clearTitles() { clearTitleRows(); clearTitleFts() }
+    @androidx.room.Transaction suspend fun clearAliases() { clearAliasRows(); clearAliasFts() }
 }
 
 /** Normalization shared by import and search: lower case, no accents nor superfluous punctuation. */
@@ -162,3 +169,9 @@ fun normalizeTitle(s: String): String =
         .lowercase()
         .replace(NON_ALNUM, " ")
         .trim()
+
+/**
+ * FTS4 MATCH expression for a search: every word of the normalized query as a prefix ("break* bad*"), so
+ * that a word matches wherever it stands in the title. Null when the query has no word.
+ */
+fun ftsQuery(normalized: String): String? = normalized.split(' ').filter { it.isNotBlank() }.joinToString(" ") { "$it*" }.ifBlank { null }

@@ -97,7 +97,11 @@ class SimklSyncService(
         var pullOk = false
         var before: com.example.trackstuff.data.remote.simkl.SimklActivities? = null
         try {
-            val activities = api.activities()
+            val activities = try { api.activities() } catch (e: retrofit2.HttpException) {
+                // Simkl tokens do not expire, so a 401 means revoked: disconnect and ask for a new sign-in.
+                if (e.code() == 401) { disconnect(); throw SyncAuthException("Simkl: sign-in revoked, connect again in Settings") }
+                throw e
+            }
             before = activities
             val tokens = settingsRepo.currentTokens()
             val since = tokens.simklActivitiesAt
@@ -113,7 +117,7 @@ class SimklSyncService(
                 if (activities.removedStamp != tokens.simklRemovedStamp) pulled += reconcileRemovals(api)
             }
             pullOk = true
-        } catch (e: Exception) { errors += "Pull: ${describeError(e)}"; Log.w(TAG, e) }
+        } catch (e: SyncAuthException) { throw e } catch (e: Exception) { errors += "Pull: ${describeError(e)}"; Log.w(TAG, e) }
 
         try { pushed = push(api) } catch (e: Exception) { errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
 

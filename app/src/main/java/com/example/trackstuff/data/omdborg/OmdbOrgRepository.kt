@@ -281,10 +281,9 @@ class OmdbOrgRepository(
         val q = normalizeTitle(query)
         if (q.isBlank()) return emptyList()
         val lang = language.substringBefore('-').lowercase()
-        // Indexed prefix search first; the full "contains" scan only completes a short list.
-        val prefix = dao.searchPrefix(q, "$q*", com.example.trackstuff.data.imdb.ImdbRepository.SEARCH_LIMIT)
-        val rest = if (prefix.size >= com.example.trackstuff.data.imdb.ImdbRepository.SEARCH_MIN_BEFORE_SCAN) emptyList() else dao.searchContains(q, prefix.map { it.id }.ifEmpty { listOf(0) }, com.example.trackstuff.data.imdb.ImdbRepository.SEARCH_LIMIT - prefix.size)
-        return (prefix + rest).map { it.toSummary(lang) }
+        // Full-text index: every word as a prefix, wherever it stands in the title or an alias.
+        val match = com.example.trackstuff.data.local.ftsQuery(q) ?: return emptyList()
+        return dao.searchFts(q, match, com.example.trackstuff.data.imdb.ImdbRepository.SEARCH_LIMIT).map { it.toSummary(lang) }
     }
 
     /** Finds a title by omdb.org id, IMDb id, or exact title + year. */

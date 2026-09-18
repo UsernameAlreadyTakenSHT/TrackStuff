@@ -93,21 +93,44 @@ class TraktSyncService(
         token = null
     }
 
-    private suspend fun ensureFreshToken() {
+    /**
+     * Access tokens last 90 days: refreshed [REFRESH_AHEAD_MS] before expiry during a normal sync, so the
+     * rotation happens while the app is in use rather than on the last day. [force] refreshes at once
+     * (after a 401). A refresh refused by Trakt (`invalid_grant`, revoked or already-rotated token)
+     * disconnects the account: the user is told to sign in again instead of failing silently for ever.
+     */
+    private suspend fun ensureFreshToken(force: Boolean = false) {
         val s = settingsRepo.current()
         val t = settingsRepo.currentTokens()
         if (!t.traktConnected) throw SyncAuthException("Trakt: not connected")
-        if (System.currentTimeMillis() > t.traktExpiresAt - 60_000 && t.traktRefreshToken.isNotBlank()) {
+        if (!force && System.currentTimeMillis() < t.traktExpiresAt - REFRESH_AHEAD_MS) { token = t.traktAccessToken; return }
+        if (t.traktRefreshToken.isBlank()) { disconnect(); throw SyncAuthException("Trakt: sign-in expired, connect again in Settings") }
+        try {
             val fresh = api().refresh(TraktRefreshRequest(t.traktRefreshToken, s.traktClientId, s.traktClientSecret))
             settingsRepo.saveTraktTokens(fresh.accessToken, fresh.refreshToken, (fresh.createdAt + fresh.expiresIn) * 1000L)
             token = fresh.accessToken
-        } else token = t.traktAccessToken
+        } catch (e: retrofit2.HttpException) {
+            // 400 invalid_grant / 401: the refresh token is dead. Anything else (5xx) is transient: keep the tokens.
+            if (e.code() == 400 || e.code() == 401) { disconnect(); throw SyncAuthException("Trakt: sign-in expired, connect again in Settings") }
+            throw e
+        }
     }
 
     // ------------------------------------------------------------------ Sync
 
     suspend fun sync(): SyncReport {
         ensureFreshToken()
+        return try {
+            syncOnce()
+        } catch (e: retrofit2.HttpException) {
+            // Token revoked or rotated elsewhere: one refresh, then the sync runs again.
+            if (e.code() != 401) throw e
+            ensureFreshToken(force = true)
+            syncOnce()
+        }
+    }
+
+    private suspend fun syncOnce(): SyncReport {
         val api = api()
         val errors = mutableListOf<String>()
         var pulled = 0
@@ -116,27 +139,27 @@ class TraktSyncService(
         // ---- Pull: only when something changed on Trakt since the last sync.
         var activities: String? = null
         val since = settingsRepo.currentTokens().traktActivitiesAt
-        try { activities = api.lastActivities().all } catch (e: Exception) { Log.w(TAG, e) }
+        try { activities = api.lastActivities().all } catch (e: Exception) { if (e.isUnauthorized()) throw e; Log.w(TAG, e) }
         val changed = activities == null || since.isBlank() || activities != since
         if (changed) {
             // Local ids seen in the Trakt lists: anything synced before but no longer there was removed on Trakt.
             val present = HashSet<Long>()
             var complete = true
-            try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present) } catch (e: Exception) { complete = false; errors += "Watchlist: ${describeError(e)}"; Log.w(TAG, e) }
-            try { pulled += pullWatched(api.watchedMovies(), isShow = false, present) } catch (e: Exception) { complete = false; errors += "Watched movies: ${describeError(e)}"; Log.w(TAG, e) }
-            try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present) } catch (e: Exception) { complete = false; errors += "Watched shows: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present) } catch (e: Exception) { if (e.isUnauthorized()) throw e; complete = false; errors += "Watchlist: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatched(api.watchedMovies(), isShow = false, present) } catch (e: Exception) { if (e.isUnauthorized()) throw e; complete = false; errors += "Watched movies: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present) } catch (e: Exception) { if (e.isUnauthorized()) throw e; complete = false; errors += "Watched shows: ${describeError(e)}"; Log.w(TAG, e) }
             // No reconciliation on the first pull after (re)connecting: nothing local has been pushed there yet.
             if (complete && since.isNotBlank()) pulled += reconcileRemovals(present)
         }
 
         // ---- Push
-        try { pushed = pushLocal(api) } catch (e: Exception) { errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
+        try { pushed = pushLocal(api) } catch (e: Exception) { if (e.isUnauthorized()) throw e; errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
 
         // Resume point: the timestamp after our pushes, so our own changes are not read back.
         if (errors.isEmpty()) try {
             val after = if (pushed > 0) api.lastActivities().all else activities
             if (after != null) settingsRepo.saveTraktActivitiesAt(after)
-        } catch (e: Exception) { Log.w(TAG, e) }
+        } catch (e: Exception) { if (e.isUnauthorized()) throw e; Log.w(TAG, e) }
 
         val enriched = try { library.enrichPending() } catch (e: Exception) { 0 }
         return SyncReport(pushed, pulled, enriched, errors)
@@ -337,5 +360,10 @@ class TraktSyncService(
 
     companion object {
         private const val POST_INTERVAL_MS = 1100L
+        /** Refresh the access token this long before it expires (tokens last 90 days). */
+        const val REFRESH_AHEAD_MS = 7 * 24 * 60 * 60 * 1000L
+
+        /** A 401 must not be swallowed by the per-step error handling: it triggers a token refresh in [sync]. */
+        private fun Exception.isUnauthorized() = this is retrofit2.HttpException && code() == 401
     }
 }

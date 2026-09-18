@@ -236,3 +236,12 @@ class DescribeErrorTest {
         assertEquals("boom", com.example.trackstuff.data.remote.describeError(IllegalStateException("boom")))
     }
 }
+
+class FtsQueryTest {
+    @Test
+    fun `every word becomes a prefix token`() {
+        assertEquals("break* bad*", com.example.trackstuff.data.local.ftsQuery("break bad"))
+        assertEquals("matrix*", com.example.trackstuff.data.local.ftsQuery(" matrix "))
+        assertNull(com.example.trackstuff.data.local.ftsQuery("   "))
+    }
+}

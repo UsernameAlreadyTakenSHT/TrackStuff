@@ -45,6 +45,11 @@ class TrackStuffApp : Application(), coil.ImageLoaderFactory {
         // The HTTP cache must exist before the first request: created with the default size, then resized in
         // place once the settings are read (no blocking read of the preference files on the main thread).
         Network.init(this, Network.DEFAULT_CACHE_MB)
+        // Open the dataset databases now, in the background: a pending migration (e.g. the full-text tables of
+        // 0.1.9, a minute on Full datasets) then runs before the first search or page instead of blocking it.
+        container.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { container.imdbDatabase.openHelper.writableDatabase; container.omdbOrgDatabase.openHelper.writableDatabase }
+        }
         container.appScope.launch {
             Network.setCacheSize(container.settings.current().httpCacheMb)
             // Explicit-refresh limits survive restarts (merged, in case one was acquired meanwhile).

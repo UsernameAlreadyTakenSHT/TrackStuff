@@ -386,10 +386,9 @@ class ImdbRepository(
     suspend fun search(query: String): List<MediaSummary> {
         val q = normalizeTitle(query)
         if (q.isBlank()) return emptyList()
-        // Indexed prefix search first; the full "contains" scan only completes a short list.
-        val prefix = dao.searchPrefix("$q*", SEARCH_LIMIT)
-        val rest = if (prefix.size >= SEARCH_MIN_BEFORE_SCAN) emptyList() else dao.searchContains(q, prefix.map { it.imdbId }.ifEmpty { listOf("") }, SEARCH_LIMIT - prefix.size)
-        return (prefix + rest).map { it.toSummary() }
+        // Full-text index: every word as a prefix, wherever it stands in the title or an alias.
+        val match = com.example.trackstuff.data.local.ftsQuery(q) ?: return emptyList()
+        return dao.searchFts(match, SEARCH_LIMIT).map { it.toSummary() }
     }
 
     private suspend fun ImdbTitleEntity.toSummary(): MediaSummary {
@@ -420,9 +419,8 @@ class ImdbRepository(
          * imported by an older version may then be refreshed before the monthly limit.
          */
         const val FORMAT_VERSION = 3
-        /** Offline search: results per query, and how many prefix matches make the "contains" scan unnecessary. */
+        /** Offline search: results per query. */
         const val SEARCH_LIMIT = 40
-        const val SEARCH_MIN_BEFORE_SCAN = 10
         /** Job values of title.principals that mark a series creator. */
         private val CREATOR_JOBS = setOf("creator", "created by")
         /** Approximate compressed sizes of the datasets (MB), for the overall progress estimate. */
