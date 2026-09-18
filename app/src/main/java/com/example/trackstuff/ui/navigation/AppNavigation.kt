@@ -102,12 +102,16 @@ fun AppNavigation() {
         }
     }
 
+    // Wide layout (landscape phone, tablet): the tabs move to a rail on the left.
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+    if (showBar && wide) Tabs(current, wide = true) { switchTab(backStack, it) }
     Column(Modifier.fillMaxSize()) {
         NavDisplay(
             backStack = backStack,
             // The tab bar below already sits above the system navigation bar: screens must not pad for it too
             // (that padding showed as a blank strip above the tabs).
-            modifier = Modifier.weight(1f).then(if (showBar) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier),
+            modifier = Modifier.weight(1f).then(if (showBar && !wide) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier),
             onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
             entryDecorators = listOf(
                 rememberSaveableStateHolderNavEntryDecorator(),
@@ -155,31 +159,44 @@ fun AppNavigation() {
                 }
             },
         )
-        if (showBar) {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = current == LibraryKey,
-                    onClick = { switchTab(backStack, LibraryKey) },
-                    icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_library)) },
+        if (showBar && !wide) Tabs(current, wide = false) { switchTab(backStack, it) }
+    }
+    }
+}
+
+/** Tab destinations, in order. */
+private data class Tab(val key: NavKey, val icon: androidx.compose.ui.graphics.vector.ImageVector, @androidx.annotation.StringRes val label: Int)
+private val TABS = listOf(
+    Tab(LibraryKey, Icons.Default.VideoLibrary, R.string.tab_library),
+    Tab(DiscoverKey, Icons.Default.Explore, R.string.tab_discover),
+    Tab(SearchKey, Icons.Default.Search, R.string.tab_search),
+    Tab(SettingsKey, Icons.Default.Settings, R.string.tab_settings),
+)
+
+/** Bottom bar on phones in portrait; a rail on the left on wide screens (landscape, tablets), where a bar would eat the height. */
+@Composable
+private fun Tabs(current: NavKey?, wide: Boolean, onSelect: (NavKey) -> Unit) {
+    if (wide) {
+        androidx.compose.material3.NavigationRail {
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            TABS.forEach { t ->
+                androidx.compose.material3.NavigationRailItem(
+                    selected = current == t.key,
+                    onClick = { onSelect(t.key) },
+                    icon = { Icon(t.icon, contentDescription = null) },
+                    label = { Text(stringResource(t.label)) },
                 )
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        }
+    } else {
+        NavigationBar {
+            TABS.forEach { t ->
                 NavigationBarItem(
-                    selected = current == DiscoverKey,
-                    onClick = { switchTab(backStack, DiscoverKey) },
-                    icon = { Icon(Icons.Default.Explore, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_discover)) },
-                )
-                NavigationBarItem(
-                    selected = current == SearchKey,
-                    onClick = { switchTab(backStack, SearchKey) },
-                    icon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_search)) },
-                )
-                NavigationBarItem(
-                    selected = current == SettingsKey,
-                    onClick = { switchTab(backStack, SettingsKey) },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_settings)) },
+                    selected = current == t.key,
+                    onClick = { onSelect(t.key) },
+                    icon = { Icon(t.icon, contentDescription = null) },
+                    label = { Text(stringResource(t.label)) },
                 )
             }
         }
