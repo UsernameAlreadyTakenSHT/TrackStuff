@@ -31,8 +31,8 @@ android {
         applicationId = "io.github.usernamealreadytakensht.trackstuff"
         minSdk = 29
         targetSdk = 37
-        versionCode = 10
-        versionName = "0.1.9"
+        versionCode = 11
+        versionName = "0.1.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
