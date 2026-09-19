@@ -32,6 +32,9 @@
     <string name="library_filter_hint">Filter by title…</string>
     <string name="library_filter_all">All</string>
     <string name="library_next">Next: %s</string>
+    <string name="welcome_title">Welcome to TrackStuff</string>
+    <string name="welcome_text">Coming from an earlier install? Import your library and settings files from Settings → Backup. Otherwise, add your API keys in Settings to get started.</string>
+    <string name="welcome_later">Not now</string>
     <string name="setup_hint">To find titles, add a TMDB or TVDB API key in Settings (free accounts).</string>
     <string name="setup_open_settings">Open Settings</string>
     <string name="link_unknown">Link not recognised: IMDb, TMDB, Trakt and TVDB pages are supported.</string>
@@ -195,6 +198,10 @@
     <string name="sync_connected_simkl">Connected to Simkl</string>
     <string name="sync_timeout">Timed out, try again.</string>
     <string name="sync_disconnected">Disconnected</string>
+
+    <!-- About -->
+    <string name="about_version">TrackStuff %1$s (build %2$d)</string>
+    <string name="about_releases">Releases on GitHub</string>
 
     <!-- Credits -->
     <string name="settings_credits">Credits &amp; licenses</string>

@@ -40,7 +40,13 @@ data class LibraryUiState(
     val upcomingEpisodes: Map<Long, Episode> = emptyMap(),
 )
 
-class LibraryViewModel(private val library: LibraryRepository, settings: SettingsRepository, private val sync: SyncCoordinator) : ViewModel() {
+class LibraryViewModel(private val library: LibraryRepository, private val settings: SettingsRepository, private val sync: SyncCoordinator) : ViewModel() {
+    /** First launch with an empty library: offer to import the backup files of an earlier install (once). */
+    val showWelcome: StateFlow<Boolean> = combine(settings.welcomeSeen, library.items) { seen, items -> !seen && items.isEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun dismissWelcome() { viewModelScope.launch { settings.setWelcomeSeen() } }
+
     /** True while a service is syncing (pull-to-refresh indicator). */
     val syncing: StateFlow<Boolean> = sync.state.map { it.running != null }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 

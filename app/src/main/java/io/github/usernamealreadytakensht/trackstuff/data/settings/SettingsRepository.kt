@@ -150,6 +150,7 @@ private object Keys {
     val SIMKL_REMOVED = stringPreferencesKey("simkl_removed_stamp")
     val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
     val PREFETCH_AT = longPreferencesKey("discover_prefetch_at")
+    val WELCOME_SEEN = androidx.datastore.preferences.core.booleanPreferencesKey("welcome_seen")
     val SYNC_PRIMARY = stringPreferencesKey("sync_primary")
     val PENDING_REMOVALS = stringPreferencesKey("pending_removals")
     val REFRESH_LIMITS = stringPreferencesKey("refresh_limits")
@@ -281,6 +282,14 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun addPendingRemoval(r: io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval) = setPendingRemovals(pendingRemovals() + r)
+
+    // ---- First launch
+
+    val welcomeSeen: Flow<Boolean> = context.dataStore.data.map { it[Keys.WELCOME_SEEN] ?: false }
+
+    suspend fun setWelcomeSeen() {
+        context.dataStore.edit { p -> p[Keys.WELCOME_SEEN] = true }
+    }
 
     // ---- Discover page prefetch (once every 12 h, across restarts)
 

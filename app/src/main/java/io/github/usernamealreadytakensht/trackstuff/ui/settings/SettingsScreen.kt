@@ -194,8 +194,18 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Credits and licenses: a link, the details in a dialog.
-            TextButton(onClick = { showCredits = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text(stringResource(R.string.settings_credits)) }
+            // About: version, releases page (where updates are published), credits.
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.about_version, io.github.usernamealreadytakensht.trackstuff.BuildConfig.VERSION_NAME, io.github.usernamealreadytakensht.trackstuff.BuildConfig.VERSION_CODE),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+            Row(Modifier.align(Alignment.CenterHorizontally), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { openUrl(context, RELEASES_URL) }) { Text(stringResource(R.string.about_releases)) }
+                TextButton(onClick = { showCredits = true }) { Text(stringResource(R.string.settings_credits)) }
+            }
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -448,3 +458,6 @@ private fun CreditsDialog(onDismiss: () -> Unit) {
         },
     )
 }
+
+/** Where new versions are published (Obtainium watches the same page). */
+private const val RELEASES_URL = "https://github.com/UsernameAlreadyTakenSHT/TrackStuff/releases"

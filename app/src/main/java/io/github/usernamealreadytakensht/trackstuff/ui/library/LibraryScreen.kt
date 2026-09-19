@@ -75,6 +75,18 @@ fun LibraryScreen(vm: LibraryViewModel, onOpen: (Long) -> Unit, onOpenSettings: 
         )
     }
 
+    // First launch: offer to import the backup files of an earlier install (shown once).
+    val showWelcome by vm.showWelcome.collectAsStateWithLifecycle()
+    if (showWelcome) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = vm::dismissWelcome,
+            title = { Text(stringResource(R.string.welcome_title)) },
+            text = { Text(stringResource(R.string.welcome_text)) },
+            confirmButton = { TextButton(onClick = { vm.dismissWelcome(); onOpenSettings() }) { Text(stringResource(R.string.setup_open_settings)) } },
+            dismissButton = { TextButton(onClick = vm::dismissWelcome) { Text(stringResource(R.string.welcome_later)) } },
+        )
+    }
+
     var filterOpen by rememberSaveable { mutableStateOf(false) }
     val filtering = state.query.isNotBlank() || state.kind != null
     val listState = rememberLazyListState()
