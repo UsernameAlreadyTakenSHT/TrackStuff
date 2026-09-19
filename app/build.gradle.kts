@@ -22,13 +22,13 @@ val embedKeysInRelease = localProps.getProperty("RELEASE_EMBED_KEYS")?.toBoolean
 val secretNames = listOf("TMDB_API_KEY", "TVDB_API_KEY", "OMDB_API_KEY", "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "SIMKL_CLIENT_ID", "SIMKL_CLIENT_SECRET")
 
 android {
-    namespace = "com.example.trackstuff"
+    namespace = "io.github.usernamealreadytakensht.trackstuff"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.trackstuff"
+        applicationId = "io.github.usernamealreadytakensht.trackstuff"
         minSdk = 29
         targetSdk = 37
         versionCode = 10
