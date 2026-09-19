@@ -31,14 +31,10 @@ Library database 11 → 12 (migration, no data loss). Install over 0.1.7 (same s
 
 ## v0.1.7 — 2026-09-14
 
-## v0.1.7 — 2026-09-14
-
 One thing, for people who want Discover to work with no network at all.
 
 ### Added
 - **Settings → Cache → "Cache Discover"** caches the page and poster of every title of every TMDB and TVDB Discover row — about a thousand pages, ~150 MB the first time; pages already cached are not downloaded again. Progress line and Cancel; at most once an hour.
-
-## v0.1.6 — 2026-09-14
 
 ## v0.1.6 — 2026-09-14
 
@@ -52,8 +48,6 @@ A search that looked like an endless load, and the offline prefetch extended to 
 
 ## v0.1.5 — 2026-09-14
 
-## v0.1.5 — 2026-09-14
-
 Offline mode, source chips in search, and a more compact title page.
 
 ### Added
@@ -63,8 +57,6 @@ Offline mode, source chips in search, and a more compact title page.
 
 ### Changed
 - **Compact title page**: poster as tall as the text column, ratings beside it, genres on their own line, Info section (country, seasons, episodes, age rating) above Credits, episode list folded behind the Progress row, one-line where-to-watch.
-
-## v0.1.4 — 2026-09-13
 
 ## v0.1.4 — 2026-09-13
 
@@ -93,8 +85,6 @@ Episode-level tracking, where-to-watch, shared links, and a batch of fixes and i
 
 ## v0.1.3 — 2026-09-13
 
-## v0.1.3 — 2026-09-13
-
 Sync fixes — important before syncing with an existing Trakt / Simkl account — and a sturdier
 import.
 
@@ -108,8 +98,6 @@ import.
 ### Changed
 - **Imports are cancellable**, an interrupted dataset import is flagged (its data is not used until re-imported), and each step shows its own progress and ETA alongside the overall one.
 - **Series creators from the IMDb datasets** now include the `created by` credit.
-
-## v0.1.2 — 2026-09-12
 
 ## v0.1.2 — 2026-09-12
 
@@ -127,8 +115,6 @@ Import progress you can read, and a few things verified on a real phone.
 
 ## v0.1.1 — 2026-09-12
 
-## v0.1.1 — 2026-09-12
-
 Three statuses instead of many, and a way to move to another phone without re-entering keys.
 
 ### Added
@@ -137,8 +123,6 @@ Three statuses instead of many, and a way to move to another phone without re-en
 
 ### Changed
 - **Statuses reduced to Plan to watch / Watching / Completed.** Watching follows the progress (first episode marked); movies are planned or completed. Existing libraries are migrated.
-
-## v0.1.0 — 2026-09-12
 
 ## v0.1.0 — 2026-09-12
 
