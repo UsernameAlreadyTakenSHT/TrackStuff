@@ -269,7 +269,9 @@ class MetadataRepository(
                                     DataSource.TMDB -> tmdb(s)?.let { api -> r.ids.tmdbId?.let { id -> if (r.isSeries) api.tv(id, s.language).toDetails(s.region) else api.movie(id, s.language).toDetails(s.region) } }
                                     else -> tvdb(s)?.let { api -> r.ids.tvdbId?.let { id -> (if (r.isSeries) api.series(id) else api.movie(id)).data?.toDetails(r.isSeries, s.language) } }
                                 }
-                                d?.posterUrl?.let { url -> com.example.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().close() }
+                                // The body must be read to the end: OkHttp only stores a response in its cache while it is consumed,
+                                // closing it unread discards the entry (the posters were never cached before this).
+                                d?.posterUrl?.let { url -> com.example.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { it.body?.source()?.readAll(okio.blackholeSink()) } }
                             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
                             _prefetch.value = done.incrementAndGet() to items.size
                         }

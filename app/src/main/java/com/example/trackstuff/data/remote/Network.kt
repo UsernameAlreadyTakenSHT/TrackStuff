@@ -116,8 +116,9 @@ object Network {
     // ------------------------------------------------------------------ internals
 
     private fun baseBuilder() = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        // Short enough that a dead network falls back to the cache within seconds, long enough for big TVDB pages.
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .apply {
             // Debug logging never prints keys: query-string keys are masked and auth headers redacted.
             if (BuildConfig.DEBUG) addInterceptor(
@@ -210,6 +211,8 @@ object Network {
         if (!::appContext.isInitialized) return true
         val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        // "Connected, no internet" (Wi-Fi without uplink, captive portal, no mobile signal) is offline for us:
+        // every request would only time out, so the cache is used at once.
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 }
