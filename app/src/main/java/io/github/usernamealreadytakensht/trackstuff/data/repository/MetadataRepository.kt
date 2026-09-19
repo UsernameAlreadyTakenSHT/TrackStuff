@@ -231,37 +231,56 @@ class MetadataRepository(
             val now = System.currentTimeMillis()
             if (now - settingsRepo.prefetchedAt() < PREFETCH_INTERVAL_MS) return@launch
             settingsRepo.savePrefetchedAt(now)
-            val perRow = if (io.github.usernamealreadytakensht.trackstuff.data.remote.Network.isUnmetered()) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED
-            prefetchPages(outcome, perRow)
+            val wifi = io.github.usernamealreadytakensht.trackstuff.data.remote.Network.isUnmetered()
+            // Card thumbnails are cheap (~30 KB): every row entirely on Wi-Fi, so that Discover looks complete
+            // offline; pages (JSON + poster) for the first titles only.
+            prefetchPages(outcome, pagesPerRow = if (wifi) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED, thumbsPerRow = if (wifi) Int.MAX_VALUE else PREFETCH_PER_ROW)
         }
     }
 
     @Volatile private var prefetchJob: kotlinx.coroutines.Job? = null
 
     /**
-     * "Cache Discover pages" button: every title of every online row (TMDB, TVDB), page and poster — around a
-     * thousand pages, a few minutes and ~100 MB the first time. Runs until done or [cancelPrefetch].
+     * "Cache Discover" button: every title of every online row (TMDB, TVDB) — card thumbnail, page JSON and
+     * page poster; around a thousand pages, a few minutes and ~150 MB the first time. Runs until done or
+     * [cancelPrefetch].
      */
     fun prefetchAllDiscover() {
         if (prefetchJob?.isActive == true) return
         prefetchJob = scope.launch {
             val outcome = discoverMemo?.outcome ?: store.load() ?: discover()
-            prefetchPages(outcome, Int.MAX_VALUE)
+            prefetchPages(outcome, pagesPerRow = Int.MAX_VALUE, thumbsPerRow = Int.MAX_VALUE)
         }
     }
 
     fun cancelPrefetch() { prefetchJob?.cancel() }
 
-    /** Warms the HTTP cache with the page JSON and poster of the first [perRow] titles of every online row. */
-    private suspend fun prefetchPages(outcome: DiscoverOutcome, perRow: Int) {
+    /**
+     * Warms the HTTP cache: the card thumbnail of the first [thumbsPerRow] titles of every online row, and the
+     * page JSON + page poster of the first [pagesPerRow]. Bodies are read to the end: OkHttp only stores a
+     * response in its cache while it is consumed, closing it unread discards the entry.
+     */
+    private suspend fun prefetchPages(outcome: DiscoverOutcome, pagesPerRow: Int, thumbsPerRow: Int) {
         val s = settingsRepo.current()
         val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
-        val items = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }.flatMap { it.items.take(perRow) }.distinctBy { it.ids to it.isSeries }
+        val rows = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }
+        val pages = rows.flatMap { it.items.take(pagesPerRow) }.distinctBy { it.ids to it.isSeries }
+        val thumbs = rows.flatMap { it.items.take(thumbsPerRow) }.mapNotNull { it.posterUrl }.distinct()
+        val total = pages.size + thumbs.size
         val done = java.util.concurrent.atomic.AtomicInteger(0)
-        _prefetch.value = 0 to items.size
+        _prefetch.value = 0 to total
+        suspend fun warm(url: String) = io.github.usernamealreadytakensht.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { it.body?.source()?.readAll(okio.blackholeSink()) }
         try {
             kotlinx.coroutines.coroutineScope {
-                items.map { r ->
+                val thumbJobs = thumbs.map { url ->
+                    async {
+                        limit.withPermit {
+                            try { warm(url) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
+                            _prefetch.value = done.incrementAndGet() to total
+                        }
+                    }
+                }
+                val pageJobs = pages.map { r ->
                     async {
                         limit.withPermit {
                             try {
@@ -269,14 +288,13 @@ class MetadataRepository(
                                     DataSource.TMDB -> tmdb(s)?.let { api -> r.ids.tmdbId?.let { id -> if (r.isSeries) api.tv(id, s.language).toDetails(s.region) else api.movie(id, s.language).toDetails(s.region) } }
                                     else -> tvdb(s)?.let { api -> r.ids.tvdbId?.let { id -> (if (r.isSeries) api.series(id) else api.movie(id)).data?.toDetails(r.isSeries, s.language) } }
                                 }
-                                // The body must be read to the end: OkHttp only stores a response in its cache while it is consumed,
-                                // closing it unread discards the entry (the posters were never cached before this).
-                                d?.posterUrl?.let { url -> io.github.usernamealreadytakensht.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { it.body?.source()?.readAll(okio.blackholeSink()) } }
+                                d?.posterUrl?.let { warm(it) }
                             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
-                            _prefetch.value = done.incrementAndGet() to items.size
+                            _prefetch.value = done.incrementAndGet() to total
                         }
                     }
-                }.awaitAll()
+                }
+                (thumbJobs + pageJobs).awaitAll()
             }
         } finally { _prefetch.value = null }
     }
