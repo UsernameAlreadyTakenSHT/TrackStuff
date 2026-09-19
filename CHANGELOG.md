@@ -1,42 +1,35 @@
-## Unreleased
-
-### Added
-- **Welcome dialog on first launch** with an empty library: import the library and settings files of an earlier install from Settings → Backup, or set the API keys. Shown once.
-- **About block in Settings**: installed version and build, a link to the GitHub releases page (the one Obtainium watches), credits.
-
 ## v0.1.10 — 2026-09-19
 
-New application id and two offline fixes. **Android sees this version as a new app**: it installs next to 0.1.9 and starts empty — in 0.1.9, Settings → Backup → Export the library and the settings; install 0.1.10 and import both files; uninstall the old app; re-download the IMDb / omdb.org datasets; add the repository again in Obtainium.
+### New application id — read before installing
+The package is now `io.github.usernamealreadytakensht.trackstuff` (was `com.example.trackstuff`). Android sees it as a **new app**: it installs next to 0.1.9 and starts empty.
+1. In 0.1.9: Settings → Backup → **Export** the library and the settings (two JSON files).
+2. Install 0.1.10, then Settings → Backup → **Import** both files.
+3. Uninstall the old TrackStuff; re-download the IMDb / omdb.org datasets if you use them; in Obtainium, add the repository again.
 
-### Changed
-- **Package renamed** to `io.github.usernamealreadytakensht.trackstuff` (was `com.example.trackstuff`).
+### Fixes
+- **Offline posters**: the Discover prefetch never actually stored the posters (responses were closed unread; OkHttp only caches a body while it is read). Fixed — "Cache Discover" and the automatic prefetch now keep the posters.
+- **"Connected, no internet"** (Wi-Fi without uplink, no mobile signal, captive portal) counts as offline: the cache answers at once instead of every request timing out; timeouts shortened.
 
-### Fixed
-- **Prefetched posters were never cached.** The Discover prefetch closed poster responses unread, and OkHttp only stores a response while its body is read — pages were cached, posters were not. The body is now read to the end: "Cache Discover" and the automatic prefetch keep the posters, and prefetched titles open offline with their poster.
-- **"Connected, no internet"** (Wi-Fi without uplink, no mobile signal, captive portal) is treated as offline: the cache answers at once instead of every request timing out; connect / read timeouts shortened to 8 / 20 s.
+Same signing key. Debug keys are not embedded: set your API keys in Settings or import your settings file.
 
 ## v0.1.9 — 2026-09-19
 
-Instant offline search, hardened sign-ins, landscape layout.
-
-### Added
-- **Full-text offline search** on the IMDb and omdb.org datasets (titles and translated titles, every word as a prefix): instant whatever the position of the word. Existing data is indexed by a migration in the background at the first start (a minute or two with the Full datasets), no re-import.
-- **Navigation rail** on wide screens (landscape, tablets) instead of the bottom bar.
-
-### Changed
-- **Trakt token** renewed a week before it expires; a 401 during a sync triggers one renewal and a retry; a refused renewal (or a revoked Simkl token) disconnects the account with a "connect again in Settings" message instead of failing silently.
+- **Offline search**: full-text index on the IMDb and omdb.org datasets (titles and translated titles, every word as a prefix) — instant whatever the position of the word. Existing data is indexed by a migration in the background at the first start (a minute or two with the Full datasets), no re-import needed.
+- **Trakt / Simkl sign-in**: the Trakt token is renewed a week before it expires, a 401 during a sync triggers one renewal and a retry, and a refused renewal (or a revoked Simkl token) disconnects the account with a "connect again in Settings" message instead of failing silently.
+- **Landscape / tablets**: the tabs move to a rail on the left on wide screens.
 - **Themed icon** (Android 13+): the film-frame holes are cut out so they stay visible when the icon is tinted.
-- IMDb and omdb.org databases 4 → 5 (migrations, no data loss).
+
+IMDb and omdb.org databases 4 → 5 (migrations, no data loss). Install over 0.1.8 (same signing key). Debug keys are not embedded: set your API keys in Settings or import your settings file.
 
 ## v0.1.8 — 2026-09-18
 
-Discover start-up, sources on the page.
+- **Discover**: the automatic page prefetch really runs once every 12 h (the stamp is now stored, so a cold start no longer walks the ~200 cached pages with the "Caching pages…" line); the saved rows appear at once on start-up while the fresh load runs in the background; the pull-to-refresh indicator only shows for an explicit refresh.
+- **Pages**: the Sources line names where the ratings and the credits came from (TMDB, TVDB, OMDb API, IMDb datasets, omdb.org), not only the poster and description.
+- **Settings**: realistic duration for the Full IMDb import (5–10 min on a recent phone).
 
-### Changed
-- **Discover prefetch really runs once every 12 h**: the stamp is now stored, so a cold start no longer walks the ~200 cached pages with the "Caching pages…" line.
-- **Saved Discover rows appear at once** on start-up while the fresh load runs in the background; the pull-to-refresh indicator only shows for an explicit refresh.
-- **Sources line** on the page names where the ratings and the credits came from (TMDB, TVDB, OMDb API, IMDb datasets, omdb.org), not only the poster and description. Library database 11 → 12.
-- Realistic duration for the Full IMDb import in Settings (5–10 min on a recent phone).
+Library database 11 → 12 (migration, no data loss). Install over 0.1.7 (same signing key). Debug keys are not embedded: set your API keys in Settings or import your settings file.
+
+## v0.1.7 — 2026-09-14
 
 ## v0.1.7 — 2026-09-14
 
@@ -44,6 +37,8 @@ One thing, for people who want Discover to work with no network at all.
 
 ### Added
 - **Settings → Cache → "Cache Discover"** caches the page and poster of every title of every TMDB and TVDB Discover row — about a thousand pages, ~150 MB the first time; pages already cached are not downloaded again. Progress line and Cancel; at most once an hour.
+
+## v0.1.6 — 2026-09-14
 
 ## v0.1.6 — 2026-09-14
 
@@ -57,6 +52,8 @@ A search that looked like an endless load, and the offline prefetch extended to 
 
 ## v0.1.5 — 2026-09-14
 
+## v0.1.5 — 2026-09-14
+
 Offline mode, source chips in search, and a more compact title page.
 
 ### Added
@@ -66,6 +63,8 @@ Offline mode, source chips in search, and a more compact title page.
 
 ### Changed
 - **Compact title page**: poster as tall as the text column, ratings beside it, genres on their own line, Info section (country, seasons, episodes, age rating) above Credits, episode list folded behind the Progress row, one-line where-to-watch.
+
+## v0.1.4 — 2026-09-13
 
 ## v0.1.4 — 2026-09-13
 
@@ -94,6 +93,8 @@ Episode-level tracking, where-to-watch, shared links, and a batch of fixes and i
 
 ## v0.1.3 — 2026-09-13
 
+## v0.1.3 — 2026-09-13
+
 Sync fixes — important before syncing with an existing Trakt / Simkl account — and a sturdier
 import.
 
@@ -107,6 +108,8 @@ import.
 ### Changed
 - **Imports are cancellable**, an interrupted dataset import is flagged (its data is not used until re-imported), and each step shows its own progress and ETA alongside the overall one.
 - **Series creators from the IMDb datasets** now include the `created by` credit.
+
+## v0.1.2 — 2026-09-12
 
 ## v0.1.2 — 2026-09-12
 
@@ -124,6 +127,8 @@ Import progress you can read, and a few things verified on a real phone.
 
 ## v0.1.1 — 2026-09-12
 
+## v0.1.1 — 2026-09-12
+
 Three statuses instead of many, and a way to move to another phone without re-entering keys.
 
 ### Added
@@ -135,7 +140,10 @@ Three statuses instead of many, and a way to move to another phone without re-en
 
 ## v0.1.0 — 2026-09-12
 
+## v0.1.0 — 2026-09-12
+
 First release.
 
 ### Added
 - **Track movies, series, documentaries and anime** from TMDB, TVDB, OMDb API and the IMDb / omdb.org datasets, with Trakt and Simkl sync.
+
