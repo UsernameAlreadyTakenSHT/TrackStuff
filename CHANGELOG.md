@@ -1,3 +1,11 @@
+## v0.1.11 — 2026-09-19
+
+- **Offline Discover, complete this time.** The cards use thumbnails while the prefetch only stored the page posters, so titles never scrolled to stayed grey offline. The automatic prefetch now caches the thumbnails of every title of every row on Wi-Fi (the first 20 per row on mobile data) plus the pages of the first titles; "Cache Discover" caches thumbnails, pages and posters of everything.
+- **Welcome dialog on first launch** with an empty library: import the library and settings files of an earlier install from Settings → Backup, or set the API keys. Shown once.
+- **About block in Settings**: installed version and build, a link to the GitHub releases page (the one Obtainium watches), credits.
+
+Install over 0.1.10 (same signing key). Coming from 0.1.9 or earlier: see the 0.1.10 notes (new application id — export, install, import).
+
 ## v0.1.10 — 2026-09-19
 
 ### New application id — read before installing
