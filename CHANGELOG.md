@@ -1,3 +1,43 @@
+## Unreleased
+
+### Added
+- **Welcome dialog on first launch** with an empty library: import the library and settings files of an earlier install from Settings → Backup, or set the API keys. Shown once.
+- **About block in Settings**: installed version and build, a link to the GitHub releases page (the one Obtainium watches), credits.
+
+## v0.1.10 — 2026-09-19
+
+New application id and two offline fixes. **Android sees this version as a new app**: it installs next to 0.1.9 and starts empty — in 0.1.9, Settings → Backup → Export the library and the settings; install 0.1.10 and import both files; uninstall the old app; re-download the IMDb / omdb.org datasets; add the repository again in Obtainium.
+
+### Changed
+- **Package renamed** to `io.github.usernamealreadytakensht.trackstuff` (was `com.example.trackstuff`).
+
+### Fixed
+- **Prefetched posters were never cached.** The Discover prefetch closed poster responses unread, and OkHttp only stores a response while its body is read — pages were cached, posters were not. The body is now read to the end: "Cache Discover" and the automatic prefetch keep the posters, and prefetched titles open offline with their poster.
+- **"Connected, no internet"** (Wi-Fi without uplink, no mobile signal, captive portal) is treated as offline: the cache answers at once instead of every request timing out; connect / read timeouts shortened to 8 / 20 s.
+
+## v0.1.9 — 2026-09-19
+
+Instant offline search, hardened sign-ins, landscape layout.
+
+### Added
+- **Full-text offline search** on the IMDb and omdb.org datasets (titles and translated titles, every word as a prefix): instant whatever the position of the word. Existing data is indexed by a migration in the background at the first start (a minute or two with the Full datasets), no re-import.
+- **Navigation rail** on wide screens (landscape, tablets) instead of the bottom bar.
+
+### Changed
+- **Trakt token** renewed a week before it expires; a 401 during a sync triggers one renewal and a retry; a refused renewal (or a revoked Simkl token) disconnects the account with a "connect again in Settings" message instead of failing silently.
+- **Themed icon** (Android 13+): the film-frame holes are cut out so they stay visible when the icon is tinted.
+- IMDb and omdb.org databases 4 → 5 (migrations, no data loss).
+
+## v0.1.8 — 2026-09-18
+
+Discover start-up, sources on the page.
+
+### Changed
+- **Discover prefetch really runs once every 12 h**: the stamp is now stored, so a cold start no longer walks the ~200 cached pages with the "Caching pages…" line.
+- **Saved Discover rows appear at once** on start-up while the fresh load runs in the background; the pull-to-refresh indicator only shows for an explicit refresh.
+- **Sources line** on the page names where the ratings and the credits came from (TMDB, TVDB, OMDb API, IMDb datasets, omdb.org), not only the poster and description. Library database 11 → 12.
+- Realistic duration for the Full IMDb import in Settings (5–10 min on a recent phone).
+
 ## v0.1.7 — 2026-09-14
 
 One thing, for people who want Discover to work with no network at all.
