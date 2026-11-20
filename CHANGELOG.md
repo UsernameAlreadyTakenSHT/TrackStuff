@@ -1,3 +1,32 @@
+## v0.1.12 — 2026-11-20
+
+Fixes from a full review of the code; no new feature.
+
+### Trakt / Simkl sync
+- **No more duplicated plays on Trakt after reconnecting or importing a backup.** The first sync of a title after connecting the account or importing a library used to send its whole history again. Now the more advanced side is kept and only the difference is sent; when Trakt is ahead, the local title follows Trakt.
+- Finishing a show sends only the episodes that were left; going back from "Completed" to "Watching" adds nothing.
+- A sync no longer reshuffles "Continue watching" and "History": a title is only touched when its status or position really changes.
+- A removed title no longer comes back when something else changed on Trakt before the sync.
+- Removals respect the Trakt rate limit, and the "Sync" button of Settings runs to the end when you leave the screen.
+
+### Library data
+- **The library can no longer be wiped by a missing migration**: the destructive fallback is gone from the library database (it stays on the re-downloadable IMDb / omdb.org datasets).
+- Updates made at the same time no longer overwrite each other (a "+1" tapped during a sync could be lost).
+- The Android backup includes the write-ahead files of the database, so a restored library is up to date.
+- Import: episode lists are fetched again right away, and titles known only to omdb.org are not added twice.
+- Titles imported by a first sync keep being completed (poster, description) after the app was killed in the middle.
+
+### Other fixes
+- New seasons arrive on their own; a season that fails to load no longer leaves a partial episode list.
+- On a network Android has not validated, the cache answers first and the network is still tried.
+- The TVDB sign-in is renewed after a refusal and when the key changes.
+- A shared IMDb / TMDB link opens one page, not one more at every rotation.
+- Search: no "was cancelled" message when typing fast.
+- Settings: a key pasted just before leaving the screen is saved; exporting over a longer file no longer leaves a corrupt JSON.
+- No white flash at start-up in dark mode.
+
+Library database unchanged (version 12). Install over 0.1.11 (same signing key).
+
 ## v0.1.11 — 2026-09-19
 
 - **Offline Discover, complete this time.** The cards use thumbnails while the prefetch only stored the page posters, so titles never scrolled to stayed grey offline. The automatic prefetch now caches the thumbnails of every title of every row on Wi-Fi (the first 20 per row on mobile data) plus the pages of the first titles; "Cache Discover" caches thumbnails, pages and posters of everything.
