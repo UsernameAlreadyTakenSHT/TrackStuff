@@ -58,7 +58,6 @@ class SyncCoordinator(
     private var lastForegroundAt = 0L
     private var pendingLocal: Job? = null
     private var authJob: Job? = null
-    @Volatile private var pulling = false
     /** Set when a sync failed (typically offline); the next network availability retries it. */
     @Volatile private var retryPending = false
 
@@ -76,13 +75,22 @@ class SyncCoordinator(
         scope.launch { syncAll() }
     }
 
-    /** Called after every local tracking change (status, progress, addition, removal). */
+    /** Sync of one service from its "Sync" button, in the application scope: leaving the screen must not cancel it half-way. */
+    fun syncService(service: SyncService) {
+        scope.launch { sync(service) }
+    }
+
+    /**
+     * Called after every local tracking change made by the user (status, progress, addition, removal); the
+     * changes a pull makes do not come through here. A change made while a sync runs is not lost: its own
+     * sync is scheduled as usual and waits for the running one.
+     */
     fun onLocalChange() {
-        if (pulling) return // change caused by a pull in progress, not by the user
         pendingLocal?.cancel()
         pendingLocal = scope.launch {
             delay(LOCAL_CHANGE_DELAY_MS)
-            syncAll()
+            // In its own job: the next change cancels this wait, never a sync already running.
+            scope.launch { syncAll() }
         }
     }
 
@@ -96,7 +104,8 @@ class SyncCoordinator(
         networkRetry?.cancel()
         networkRetry = scope.launch {
             delay(NETWORK_SETTLE_MS)
-            syncAll()
+            // In its own job: a new network event cancels this wait, never a sync already running.
+            scope.launch { syncAll() }
         }
     }
 
@@ -157,7 +166,6 @@ class SyncCoordinator(
         _state.update { it.copy(running = service) }
         var failure: String? = null
         val msg = try {
-            pulling = true
             val report = when (service) { SyncService.TRAKT -> trakt.sync(); SyncService.SIMKL -> simkl.sync() }
             if (report.errors.isNotEmpty()) { retryPending = true; failure = report.errors.first() }
             report.summary(service.label)
@@ -169,8 +177,6 @@ class SyncCoordinator(
             retryPending = true
             failure = describeError(e)
             "${service.label}: ${describeError(e)}"
-        } finally {
-            pulling = false
         }
         settingsRepo.saveLastSyncAt(System.currentTimeMillis())
         _state.update { it.copy(running = null, lastResults = it.lastResults + (service to msg), lastFailure = failure?.let { f -> SyncFailure(service, f, System.currentTimeMillis()) } ?: it.lastFailure) }

@@ -65,11 +65,12 @@ data class DetailKey(
     val isSeries: Boolean = false,
     val title: String? = null,
     val year: Int? = null,
+    val omdbOrgId: Int? = null,
 ) : NavKey {
     companion object {
         fun local(id: Long) = DetailKey(localId = id)
         fun remote(s: MediaSummary) = DetailKey(
-            tmdbId = s.ids.tmdbId, imdbId = s.ids.imdbId, tvdbId = s.ids.tvdbId,
+            tmdbId = s.ids.tmdbId, imdbId = s.ids.imdbId, tvdbId = s.ids.tvdbId, omdbOrgId = s.ids.omdbOrgId,
             isSeries = s.isSeries, title = s.title.ifBlank { null }, year = s.year,
         )
     }
@@ -84,6 +85,7 @@ fun AppNavigation() {
     val current = backStack.lastOrNull()
     val showBar = current in TOP_LEVEL
     val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
 
     // A page URL shared to the app: resolved to a title, then opened (existing library entry preferred).
     val sharedLink by container.sharedLink.collectAsStateWithLifecycle()
@@ -91,8 +93,8 @@ fun AppNavigation() {
         val url = sharedLink ?: return@LaunchedEffect
         // Consumed only at the end: clearing it first would restart (cancel) this effect.
         try {
-            val summary = try { container.metadata.resolveLink(url) } catch (e: Exception) {
-                Toast.makeText(context, context.getString(R.string.link_failed, describeError(e)), Toast.LENGTH_LONG).show(); return@LaunchedEffect
+            val summary = try { container.metadata.resolveLink(url) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+                Toast.makeText(context, resources.getString(R.string.link_failed, describeError(e)), Toast.LENGTH_LONG).show(); return@LaunchedEffect
             }
             if (summary == null) { Toast.makeText(context, R.string.link_unknown, Toast.LENGTH_LONG).show(); return@LaunchedEffect }
             val existing = container.library.findExisting(summary.ids, summary.isSeries)
@@ -141,7 +143,7 @@ fun AppNavigation() {
                     )
                 }
                 entry<SettingsKey> {
-                    val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, container.trakt, container.simkl, container.omdbOrg, container.imdb, container.sync, container.backup, container.metadata) })
+                    val vm: SettingsViewModel = viewModel(factory = factory { SettingsViewModel(container.settings, container.trakt, container.simkl, container.omdbOrg, container.imdb, container.sync, container.backup, container.metadata, container.appScope) })
                     SettingsScreen(vm)
                 }
                 entry<DetailKey> { key ->
@@ -150,7 +152,7 @@ fun AppNavigation() {
                         factory = factory {
                             DetailViewModel(
                                 container.library, container.metadata,
-                                key.localId, ExternalIds(tmdbId = key.tmdbId, imdbId = key.imdbId, tvdbId = key.tvdbId),
+                                key.localId, ExternalIds(tmdbId = key.tmdbId, imdbId = key.imdbId, tvdbId = key.tvdbId, omdbOrgId = key.omdbOrgId),
                                 key.isSeries, key.title, key.year,
                             )
                         },

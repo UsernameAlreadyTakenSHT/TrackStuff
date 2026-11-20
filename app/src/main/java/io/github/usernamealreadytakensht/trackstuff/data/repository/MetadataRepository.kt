@@ -32,6 +32,7 @@ import io.github.usernamealreadytakensht.trackstuff.domain.fillMissingFrom
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 private const val TAG = "Metadata"
@@ -89,19 +90,25 @@ class MetadataRepository(
     /** TVDB v4: the API key must be exchanged for a token (valid ~1 month). */
     private suspend fun tvdb(s: AppSettings): TvdbApi? {
         if (!s.hasTvdb) return null
-        val api = tvdbApi ?: TvdbApi.create { tvdbToken }.also { tvdbApi = it }
-        val tokens = settingsRepo.currentTokens()
-        val now = System.currentTimeMillis()
-        if (tokens.tvdbToken.isNotBlank() && tokens.tvdbTokenExpiresAt > now) {
-            tvdbToken = tokens.tvdbToken
-            return api
+        // A token refused by TVDB (401) is forgotten: the next call logs in again instead of failing until it expires.
+        val api = tvdbApi ?: TvdbApi.create({ tvdbToken }, onUnauthorized = { tvdbToken = null; scope.launch { settingsRepo.saveTvdbToken("", 0) } }).also { tvdbApi = it }
+        // One login at a time: parallel callers (prefetch, page + episodes) wait and reuse the same token.
+        return tvdbLogin.withLock {
+            val tokens = settingsRepo.currentTokens()
+            val now = System.currentTimeMillis()
+            if (tokens.tvdbToken.isNotBlank() && tokens.tvdbTokenExpiresAt > now) {
+                tvdbToken = tokens.tvdbToken
+                return@withLock api
+            }
+            val token = api.login(TvdbLoginRequest(s.tvdbApiKey, s.tvdbPin.ifBlank { null })).data?.token
+                ?: throw IllegalStateException("TVDB: login refused (invalid key?)")
+            tvdbToken = token
+            settingsRepo.saveTvdbToken(token, now + 27L * 24 * 3600 * 1000)
+            api
         }
-        val token = api.login(TvdbLoginRequest(s.tvdbApiKey, s.tvdbPin.ifBlank { null })).data?.token
-            ?: throw IllegalStateException("TVDB: login refused (invalid key?)")
-        tvdbToken = token
-        settingsRepo.saveTvdbToken(token, now + 27L * 24 * 3600 * 1000)
-        return api
     }
+
+    private val tvdbLogin = kotlinx.coroutines.sync.Mutex()
 
     // ------------------------------------------------------------------ Search
 
@@ -230,11 +237,12 @@ class MetadataRepository(
             // The timestamp is persisted: a cold start must not walk the 200 pages again (all cache hits, but visible).
             val now = System.currentTimeMillis()
             if (now - settingsRepo.prefetchedAt() < PREFETCH_INTERVAL_MS) return@launch
-            settingsRepo.savePrefetchedAt(now)
             val wifi = io.github.usernamealreadytakensht.trackstuff.data.remote.Network.isUnmetered()
             // Card thumbnails are cheap (~30 KB): every row entirely on Wi-Fi, so that Discover looks complete
             // offline; pages (JSON + poster) for the first titles only.
-            prefetchPages(outcome, pagesPerRow = if (wifi) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED, thumbsPerRow = if (wifi) Int.MAX_VALUE else PREFETCH_PER_ROW)
+            val warmed = prefetchPages(outcome, pagesPerRow = if (wifi) PREFETCH_PER_ROW else PREFETCH_PER_ROW_METERED, thumbsPerRow = if (wifi) Int.MAX_VALUE else PREFETCH_PER_ROW)
+            // Stamped once something was really cached: a run that failed offline is tried again at the next load.
+            if (warmed > 0) settingsRepo.savePrefetchedAt(now)
         }
     }
 
@@ -260,7 +268,7 @@ class MetadataRepository(
      * page JSON + page poster of the first [pagesPerRow]. Bodies are read to the end: OkHttp only stores a
      * response in its cache while it is consumed, closing it unread discards the entry.
      */
-    private suspend fun prefetchPages(outcome: DiscoverOutcome, pagesPerRow: Int, thumbsPerRow: Int) {
+    private suspend fun prefetchPages(outcome: DiscoverOutcome, pagesPerRow: Int, thumbsPerRow: Int): Int {
         val s = settingsRepo.current()
         val limit = kotlinx.coroutines.sync.Semaphore(PREFETCH_CONCURRENCY)
         val rows = outcome.sections.filter { it.source == DataSource.TMDB || it.source == DataSource.TVDB }
@@ -269,13 +277,17 @@ class MetadataRepository(
         val total = pages.size + thumbs.size
         val done = java.util.concurrent.atomic.AtomicInteger(0)
         _prefetch.value = 0 to total
-        suspend fun warm(url: String) = io.github.usernamealreadytakensht.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { it.body?.source()?.readAll(okio.blackholeSink()) }
+        val warmed = java.util.concurrent.atomic.AtomicInteger(0)
+        // Blocking calls: on the IO dispatcher (not the few threads of the default one), interrupted on cancel.
+        suspend fun warm(url: String) = kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) {
+            io.github.usernamealreadytakensht.trackstuff.data.remote.Network.client.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { it.body?.source()?.readAll(okio.blackholeSink()) }
+        }
         try {
             kotlinx.coroutines.coroutineScope {
                 val thumbJobs = thumbs.map { url ->
                     async {
                         limit.withPermit {
-                            try { warm(url) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
+                            try { warm(url); warmed.incrementAndGet() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
                             _prefetch.value = done.incrementAndGet() to total
                         }
                     }
@@ -289,6 +301,7 @@ class MetadataRepository(
                                     else -> tvdb(s)?.let { api -> r.ids.tvdbId?.let { id -> (if (r.isSeries) api.series(id) else api.movie(id)).data?.toDetails(r.isSeries, s.language) } }
                                 }
                                 d?.posterUrl?.let { warm(it) }
+                                if (d != null) warmed.incrementAndGet()
                             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Prefetch skipped: ${errMsg(e)}") }
                             _prefetch.value = done.incrementAndGet() to total
                         }
@@ -297,6 +310,7 @@ class MetadataRepository(
                 (thumbJobs + pageJobs).awaitAll()
             }
         } finally { _prefetch.value = null }
+        return warmed.get()
     }
 
     /** Each source is independent: a missing key or a network error simply drops its rows and adds a message. */
@@ -487,16 +501,21 @@ class MetadataRepository(
      */
     suspend fun episodes(ids: ExternalIds, seasonCount: Int?, title: String?): List<Episode> {
         val s = settingsRepo.current()
+        // A source that fails (network, server) has not said "no episodes": when no other source answers
+        // either, the failure is reported instead of an empty list.
+        var failure: Exception? = null
         try {
             val api = tmdb(s)
             val tmdbId = ids.tmdbId ?: api?.let { resolveTmdbId(it, ids, s.language, true).tmdbId }
             if (api != null && tmdbId != null) {
-                val count = seasonCount ?: api.tv(tmdbId, s.language).seasons.count { it.seasonNumber > 0 }
-                val seasons = kotlinx.coroutines.coroutineScope { (1..count).map { n -> async { runCatching { api.season(tmdbId, n, s.language) }.getOrNull() } }.awaitAll() }
-                val eps = seasons.filterNotNull().flatMap { season -> season.episodes.map { Episode(season.seasonNumber, it.episodeNumber, it.name?.takeIf { n -> n.isNotBlank() }, it.airDate?.takeIf { d -> d.length == 10 }) } }
+                // The seasons are read from the series page each time: a stored count misses a season added since.
+                val numbers = api.tv(tmdbId, s.language).seasons.map { it.seasonNumber }.filter { it > 0 }.distinct().sorted()
+                // Every season or nothing: a list with a season missing would replace the complete one.
+                val seasons = kotlinx.coroutines.coroutineScope { numbers.map { n -> async { api.season(tmdbId, n, s.language) } }.awaitAll() }
+                val eps = numbers.zip(seasons).flatMap { (n, season) -> season.episodes.map { Episode(n, it.episodeNumber, it.name?.takeIf { t -> t.isNotBlank() }, it.airDate?.takeIf { d -> d.length == 10 }) } }
                 if (eps.isNotEmpty()) return eps.sortedWith(compareBy({ it.season }, { it.number }))
             }
-        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TMDB episodes failed: ${errMsg(e)}") }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { failure = e; Log.w(TAG, "TMDB episodes failed: ${errMsg(e)}") }
         try {
             val api = tvdb(s)
             val tvdbId = ids.tvdbId ?: api?.let { a -> ids.imdbId?.let { tt -> a.byRemoteId(tt).data?.firstNotNullOfOrNull { h -> h.series }?.id } ?: findTvdbId(a, title, true, ids.imdbId) }
@@ -515,7 +534,7 @@ class MetadataRepository(
                 }
                 if (eps.isNotEmpty()) return eps.sortedWith(compareBy({ it.season }, { it.number }))
             }
-        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "TVDB episodes failed: ${errMsg(e)}") }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { failure = failure ?: e; Log.w(TAG, "TVDB episodes failed: ${errMsg(e)}") }
         try {
             val imdbId = ids.imdbId
             if (s.hasOmdb && imdbId != null && seasonCount != null && seasonCount in 1..OMDB_MAX_SEASONS) {
@@ -530,7 +549,8 @@ class MetadataRepository(
                 }
                 if (eps.isNotEmpty()) return eps
             }
-        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, "OMDb episodes failed: ${errMsg(e)}") }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { failure = failure ?: e; Log.w(TAG, "OMDb episodes failed: ${errMsg(e)}") }
+        failure?.let { throw it }
         return emptyList()
     }
 
@@ -724,28 +744,6 @@ class MetadataRepository(
         val hits = api.search(title, if (isSeries) "series" else "movie", 10).data ?: return null
         val byImdb = imdbId?.let { id -> hits.firstOrNull { h -> h.remoteIds.any { it.id == id } } }
         return (byImdb ?: hits.firstOrNull())?.tvdbId?.toIntOrNull()
-    }
-
-    /** Refreshes only the ratings (IMDb/RT/Metacritic via OMDb, TMDB) of an existing page. */
-    suspend fun refreshRatings(d: MediaDetails): Ratings {
-        val s = settingsRepo.current()
-        var r = d.ratings
-        try {
-            val api = tmdb(s)
-            val tmdbId = d.ids.tmdbId
-            if (api != null && tmdbId != null) {
-                r = if (d.isSeries) api.tv(tmdbId, s.language).let { r.copy(tmdb = it.voteAverage, tmdbVotes = it.voteCount) }
-                else api.movie(tmdbId, s.language).let { r.copy(tmdb = it.voteAverage, tmdbVotes = it.voteCount) }
-            }
-        } catch (e: Exception) { Log.w(TAG, "TMDB ratings failed", e) }
-        try {
-            val imdbId = d.ids.imdbId
-            if (s.hasOmdb && imdbId != null) {
-                val o = omdb.byImdbId(s.omdbApiKey, imdbId)
-                if (o.ok) r = r.copy(imdb = o.imdbScore(), imdbVotes = o.imdbVoteCount(), rottenTomatoes = o.rottenTomatoes(), metacritic = o.metacriticScore())
-            }
-        } catch (e: Exception) { Log.w(TAG, "OMDb ratings failed", e) }
-        return r
     }
 
     // ------------------------------------------------------------------ Conversions

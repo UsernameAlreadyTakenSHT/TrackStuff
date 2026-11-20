@@ -188,7 +188,16 @@ object Network {
         val cachedOnly = original.newBuilder()
             .cacheControl(CacheControl.Builder().onlyIfCached().maxStale(OFFLINE_MAX_STALE_DAYS, TimeUnit.DAYS).build())
             .build()
-        if (!isOnline()) return@Interceptor chain.proceed(cachedOnly)
+        val connectivity = connectivity()
+        if (connectivity != Connectivity.ONLINE) {
+            val cached = chain.proceed(cachedOnly)
+            // No network at all: the cache or nothing. A network the system has not validated may still work
+            // (connectivity check disabled or blocked): the cache answers at once when it can, and only a
+            // miss (504) is tried on the network, instead of failing for ever.
+            if (connectivity == Connectivity.NONE || cached.code != 504) return@Interceptor cached
+            cached.close()
+            return@Interceptor chain.proceed(original)
+        }
         // "Online" per the system but the request fails (no real connectivity, captive portal, DNS down):
         // fall back to the cache as if offline, so that a stale page beats an error.
         try {
@@ -207,12 +216,15 @@ object Network {
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }
 
-    private fun isOnline(): Boolean {
-        if (!::appContext.isInitialized) return true
-        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        // "Connected, no internet" (Wi-Fi without uplink, captive portal, no mobile signal) is offline for us:
-        // every request would only time out, so the cache is used at once.
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    private enum class Connectivity { NONE, UNVALIDATED, ONLINE }
+
+    private fun connectivity(): Connectivity {
+        if (!::appContext.isInitialized) return Connectivity.ONLINE
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return Connectivity.ONLINE
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return Connectivity.NONE
+        if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return Connectivity.NONE
+        // "Connected, no internet" (Wi-Fi without uplink, captive portal, no mobile signal) is treated as
+        // offline first: most requests would only time out, so the cache is used at once.
+        return if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) Connectivity.ONLINE else Connectivity.UNVALIDATED
     }
 }

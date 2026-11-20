@@ -310,12 +310,6 @@ class ImdbRepository(
 
     suspend fun savePoster(imdbId: String, url: String?) = dao.savePoster(io.github.usernamealreadytakensht.trackstuff.data.local.ImdbPosterEntity(imdbId, url ?: "", System.currentTimeMillis()))
 
-    /** IMDb rating and votes of a title, without network. */
-    suspend fun rating(imdbId: String): Pair<Float, Int>? = dao.byId(imdbId)?.let { it.rating to it.votes }
-
-    /** Episodes per season of a series (index 0 = season 1), without network. */
-    suspend fun seasons(imdbId: String): List<Int> = dao.seasons(imdbId)
-
     /** Offline credits (Full mode), otherwise empty. */
     suspend fun credits(imdbId: String, isSeries: Boolean): Credits {
         val rows = dao.credits(imdbId)

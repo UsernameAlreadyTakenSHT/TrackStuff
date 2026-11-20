@@ -220,12 +220,15 @@ interface TvdbApi {
         }
 
 
-        fun create(tokenProvider: () -> String?): TvdbApi {
+        /** [onUnauthorized] is called when TVDB refuses the token (401 on anything but the login): it must be dropped. */
+        fun create(tokenProvider: () -> String?, onUnauthorized: () -> Unit = {}): TvdbApi {
             val auth = Interceptor { chain ->
                 val token = tokenProvider()
                 val req = if (token.isNullOrBlank()) chain.request()
                 else chain.request().newBuilder().header("Authorization", "Bearer $token").build()
-                chain.proceed(req)
+                val response = chain.proceed(req)
+                if (response.code == 401 && !req.url.encodedPath.endsWith("/login")) onUnauthorized()
+                response
             }
             return Network.retrofit(BASE_URL, auth).create(TvdbApi::class.java)
         }

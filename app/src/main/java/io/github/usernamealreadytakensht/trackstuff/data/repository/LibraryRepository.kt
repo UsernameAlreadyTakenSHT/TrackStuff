@@ -41,14 +41,19 @@ class LibraryRepository(
         ids.tvdbId?.let { dao.findByTvdb(it, isSeries)?.let { e -> return e.toLibraryItem() } }
         ids.traktId?.let { dao.findByTrakt(it, isSeries)?.let { e -> return e.toLibraryItem() } }
         ids.simklId?.let { dao.findBySimkl(it)?.let { e -> return e.toLibraryItem() } }
+        ids.omdbOrgId?.let { dao.findByOmdbOrg(it)?.let { e -> return e.toLibraryItem() } }
         return null
     }
 
+    /** A title that has no external id at all can only be recognised by its title, year and type. */
+    suspend fun findUnidentified(ids: ExternalIds, title: String, year: Int?, isSeries: Boolean): LibraryItem? =
+        if (ids.isEmpty) dao.findWithoutIds(title, year, isSeries)?.toLibraryItem() else null
+
     /** Adds a title (or updates its page). Returns the local id. */
     suspend fun add(details: MediaDetails, status: WatchStatus = WatchStatus.PLANNED): Long {
-        val existing = findExisting(details.ids, details.isSeries)
+        val existing = findExisting(details.ids, details.isSeries) ?: findUnidentified(details.ids, details.title, details.year, details.isSeries)
         return if (existing != null) {
-            dao.update(MediaEntity.from(details.copy(ids = existing.details.ids.merge(details.ids)), existing.tracking, existing.localId))
+            updateDetails(existing.localId, details, needsEnrichment = false)
             existing.localId
         } else {
             dao.upsert(MediaEntity.from(details, UserTracking(status = status)))
@@ -69,12 +74,17 @@ class LibraryRepository(
         return dao.upsert(MediaEntity.from(details, aligned, needsEnrichment = true))
     }
 
-    suspend fun updateTracking(localId: Long, transform: (UserTracking) -> UserTracking) {
-        val e = dao.getById(localId) ?: return
-        val item = e.toLibraryItem()
-        val t = transform(item.tracking).copy(updatedAt = System.currentTimeMillis())
-        dao.update(MediaEntity.from(item.details, t, localId, e.needsEnrichment).copy(episodesAt = e.episodesAt))
-        onLocalChange?.invoke()
+    /**
+     * Changes the tracking of a title (read and written in one transaction). [fromSync] marks a change pulled
+     * from a service: it is not a user change, so it does not schedule another sync.
+     */
+    suspend fun updateTracking(localId: Long, fromSync: Boolean = false, transform: (UserTracking) -> UserTracking) {
+        dao.modify(localId) { e ->
+            val item = e.toLibraryItem()
+            val t = transform(item.tracking).copy(updatedAt = System.currentTimeMillis())
+            MediaEntity.from(item.details, t, localId, e.needsEnrichment).copy(episodesAt = e.episodesAt)
+        } ?: return
+        if (!fromSync) onLocalChange?.invoke()
     }
 
     /** One more episode watched ("+1" on a library card): see [advanced]. */
@@ -84,14 +94,21 @@ class LibraryRepository(
         updateTracking(localId) { it.advanced(seasons) }
     }
 
-    suspend fun updateDetails(localId: Long, details: MediaDetails, needsEnrichment: Boolean = false) {
-        val e = dao.getById(localId) ?: return
-        dao.update(MediaEntity.from(details, e.toLibraryItem().tracking, localId, needsEnrichment).copy(episodesAt = e.episodesAt))
+    /**
+     * Replaces the page of a title, keeping its tracking and the ids already known (read and written in one
+     * transaction). The "to enrich" flag is kept unless [needsEnrichment] says otherwise: only a real
+     * enrichment clears it.
+     */
+    suspend fun updateDetails(localId: Long, details: MediaDetails, needsEnrichment: Boolean? = null) {
+        dao.modify(localId) { e ->
+            val current = e.toLibraryItem()
+            MediaEntity.from(details.copy(ids = current.details.ids.merge(details.ids)), current.tracking, localId, needsEnrichment ?: e.needsEnrichment).copy(episodesAt = e.episodesAt)
+        }
     }
 
+    /** The category is not part of what is synced: the modification time is left alone (nothing to push). */
     suspend fun setKind(localId: Long, kind: MediaKind) {
-        val e = dao.getById(localId) ?: return
-        dao.update(e.copy(kind = kind, updatedAt = System.currentTimeMillis()))
+        dao.modify(localId) { it.copy(kind = kind) }
     }
 
     /**
@@ -100,9 +117,8 @@ class LibraryRepository(
      * [pushed] is given (a push), the status / position sent become the reference for the next delta.
      */
     suspend fun markSynced(localId: Long, trakt: Boolean, simkl: Boolean, ids: ExternalIds? = null, at: Long = System.currentTimeMillis(), pushed: UserTracking? = null) {
-        val e = dao.getById(localId) ?: return
         val now = at
-        dao.update(
+        dao.modify(localId) { e ->
             e.copy(
                 lastSyncedTrakt = if (trakt) now else e.lastSyncedTrakt,
                 lastSyncedSimkl = if (simkl) now else e.lastSyncedSimkl,
@@ -119,7 +135,7 @@ class LibraryRepository(
                 tmdbId = e.tmdbId ?: ids?.tmdbId,
                 tvdbId = e.tvdbId ?: ids?.tvdbId,
             )
-        )
+        }
     }
 
     /** Forgets the sync state with a service (disconnect): items are neither pushed as changes nor reconciled as removals. */
@@ -130,13 +146,17 @@ class LibraryRepository(
 
     /** Removal by the user: the removal is also scheduled on the services the title had been synced with. */
     suspend fun remove(localId: Long) {
-        val e = dao.getById(localId) ?: return
-        val item = e.toLibraryItem()
-        val t = item.tracking
-        dao.delete(e)
-        if (!item.details.ids.isEmpty && (t.lastSyncedTrakt != null || t.lastSyncedSimkl != null)) {
-            settings.addPendingRemoval(io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval.of(item.details.ids, item.details.isSeries, trakt = t.lastSyncedTrakt != null, simkl = t.lastSyncedSimkl != null))
-            onLocalChange?.invoke()
+        // Not cancellable: the page that asked for the removal closes at once, and a deletion without its
+        // pending removal would let the next pull bring the title back.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val e = dao.getById(localId) ?: return@withContext
+            val item = e.toLibraryItem()
+            val t = item.tracking
+            dao.delete(e)
+            if (!item.details.ids.isEmpty && (t.lastSyncedTrakt != null || t.lastSyncedSimkl != null)) {
+                settings.addPendingRemoval(io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval.of(item.details.ids, item.details.isSeries, trakt = t.lastSyncedTrakt != null, simkl = t.lastSyncedSimkl != null))
+                onLocalChange?.invoke()
+            }
         }
     }
 
@@ -171,7 +191,7 @@ class LibraryRepository(
         val fresh = metadata.details(d.ids, d.isSeries, d.title, d.year).fillMissingFrom(d)
         // Keep the category chosen by the user when it differs from the automatic guess.
         val kind = if (d.kind != fresh.kind && d.kind != MediaKind.MOVIE && d.kind != MediaKind.SERIES) d.kind else fresh.kind
-        updateDetails(localId, fresh.copy(kind = kind, ids = d.ids.merge(fresh.ids)))
+        updateDetails(localId, fresh.copy(kind = kind), needsEnrichment = false)
         if (d.isSeries) try { refreshEpisodes(localId, force = true) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w("Library", "Episodes refresh failed for ${d.title}", e) }
         return get(localId)
     }
@@ -182,7 +202,8 @@ class LibraryRepository(
         val ids = item.details.ids
         if (ids.tvdbId != null || ids.imdbId == null) return
         val tvdbId = metadata.tvdbIdByImdb(settings.current(), ids.imdbId, item.details.isSeries) ?: return
-        updateDetails(localId, item.details.copy(ids = ids.copy(tvdbId = tvdbId)))
+        // Only this column: the page read before the lookup may be stale by now.
+        dao.modify(localId) { e -> if (e.tvdbId == null) e.copy(tvdbId = tvdbId) else e }
     }
 
     // ---- Episodes
@@ -202,12 +223,22 @@ class LibraryRepository(
         if (!e.isSeries) return
         if (!force && e.episodesAt != null && System.currentTimeMillis() - e.episodesAt < EPISODES_TTL_MS) return
         val item = e.toLibraryItem()
+        // Throws when a source failed and none answered: the stored list is kept and the fetch is tried again later.
         val list = metadata.episodes(item.details.ids, item.details.numberOfSeasons, item.details.title)
-        if (list.isEmpty()) return
+        if (list.isEmpty()) {
+            // No source knows the episodes of this series: asked again in a day, not at every sweep.
+            episodes.markFetched(localId, System.currentTimeMillis() - EPISODES_TTL_MS + EMPTY_RETRY_MS)
+            return
+        }
         episodes.replace(localId, list.map { EpisodeEntity.from(localId, it) })
         episodes.markFetched(localId, System.currentTimeMillis())
         val counts = list.groupBy { it.season }.let { g -> (1..(g.keys.maxOrNull() ?: 0)).map { s -> g[s]?.size ?: 0 } }
-        if (counts.isNotEmpty() && counts != item.details.seasonEpisodes) updateDetails(localId, item.details.copy(seasonEpisodes = counts, numberOfSeasons = item.details.numberOfSeasons ?: counts.size))
+        // Only these two columns: the page read before the fetch may be stale by now. The season count follows
+        // the list, which is where a new season shows up first.
+        if (counts.isNotEmpty()) dao.modify(localId) { r ->
+            val seasons = maxOf(r.numberOfSeasons ?: 0, counts.size)
+            if (r.seasonEpisodes == counts && r.numberOfSeasons == seasons) r else r.copy(seasonEpisodes = counts, numberOfSeasons = seasons)
+        }
     }
 
     private @Volatile var staleSweepAt = 0L
@@ -234,6 +265,8 @@ class LibraryRepository(
             try {
                 refresh(e.localId)
                 count++
+            } catch (ex: kotlinx.coroutines.CancellationException) {
+                throw ex
             } catch (ex: Exception) {
                 Log.w("Library", "Enrichment failed for ${e.title}", ex)
             }
@@ -245,5 +278,7 @@ class LibraryRepository(
         /** Episode lists follow the series page lifetime: a week. */
         const val EPISODES_TTL_MS = 7 * 24 * 60 * 60 * 1000L
         const val STALE_SWEEP_MS = 60 * 60 * 1000L
+        /** A series for which no source returned any episode is asked again after this delay. */
+        const val EMPTY_RETRY_MS = 24 * 60 * 60 * 1000L
     }
 }

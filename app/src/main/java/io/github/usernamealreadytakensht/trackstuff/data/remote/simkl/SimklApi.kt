@@ -42,9 +42,6 @@ data class SimklIds(
 data class SimklMedia(val title: String? = null, val year: Int? = null, val ids: SimklIds, val poster: String? = null)
 
 @JsonClass(generateAdapter = true)
-data class SimklEpisodePos(val season: Int? = null, val episode: Int? = null)
-
-@JsonClass(generateAdapter = true)
 data class SimklItem(
     val status: String? = null,
     @Json(name = "user_rating") val userRating: Int? = null,
@@ -101,9 +98,7 @@ data class SimklTypeActivities(@Json(name = "removed_from_list") val removedFrom
 
 // Responses of the POST sync/… endpoints: `added` and `not_found` hold lists of objects (not counters).
 @JsonClass(generateAdapter = true)
-data class SimklSyncResult(val added: Map<String, Any?>? = null, @Json(name = "not_found") val notFound: Map<String, Any?>? = null) {
-    fun notFoundCount(key: String) = (notFound?.get(key) as? List<*>)?.size ?: 0
-}
+data class SimklSyncResult(val added: Map<String, Any?>? = null, @Json(name = "not_found") val notFound: Map<String, Any?>? = null)
 
 interface SimklApi {
     @GET("oauth/pin")
@@ -128,9 +123,6 @@ interface SimklApi {
 
     @POST("sync/history")
     suspend fun addHistory(@Body body: SimklSyncBody): SimklSyncResult
-
-    @POST("sync/ratings")
-    suspend fun addRatings(@Body body: SimklSyncBody): SimklSyncResult
 
     /** Removes the title from the history and from every list. */
     @POST("sync/history/remove")

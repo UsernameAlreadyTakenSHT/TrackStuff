@@ -68,22 +68,6 @@ fun openUrl(context: android.content.Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
-/** Clickable rating chip: source, value, link to the external page. */
-@Composable
-fun RatingChip(label: String, value: String?, url: String?, color: Color, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = color.copy(alpha = 0.15f),
-        modifier = modifier.then(if (url != null) Modifier.clickable { openUrl(context, url) } else Modifier),
-    ) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value ?: "—", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
-            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-        }
-    }
-}
-
 @Composable
 fun KindBadge(kind: MediaKind, modifier: Modifier = Modifier) {
     Surface(shape = RoundedCornerShape(6.dp), color = kindColor(kind).copy(alpha = 0.2f), modifier = modifier) {

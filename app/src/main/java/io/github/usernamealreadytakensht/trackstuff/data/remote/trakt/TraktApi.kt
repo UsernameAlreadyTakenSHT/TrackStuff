@@ -141,12 +141,6 @@ interface TraktApi {
     @GET("sync/watched/shows")
     suspend fun watchedShows(@Query("extended") extended: String = "noseasons"): List<TraktEntry>
 
-    @GET("sync/ratings/movies")
-    suspend fun ratingsMovies(): List<TraktEntry>
-
-    @GET("sync/ratings/shows")
-    suspend fun ratingsShows(): List<TraktEntry>
-
     @POST("sync/watchlist")
     suspend fun addToWatchlist(@Body body: TraktSyncBody): TraktSyncResult
 
@@ -155,9 +149,6 @@ interface TraktApi {
 
     @POST("sync/history")
     suspend fun addToHistory(@Body body: TraktSyncBody): TraktSyncResult
-
-    @POST("sync/ratings")
-    suspend fun addRatings(@Body body: TraktSyncBody): TraktSyncResult
 
     @POST("sync/history/remove")
     suspend fun removeFromHistory(@Body body: TraktSyncBody): TraktSyncResult

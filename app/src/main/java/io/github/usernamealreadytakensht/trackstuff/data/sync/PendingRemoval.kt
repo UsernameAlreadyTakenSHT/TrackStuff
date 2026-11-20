@@ -24,6 +24,17 @@ data class PendingRemoval(
 ) {
     val ids get() = ExternalIds(tmdbId = tmdbId, imdbId = imdbId, tvdbId = tvdbId, traktId = traktId, simklId = simklId)
 
+    /**
+     * True when a title seen on a service is this removed one (any shared id, same matching as the library).
+     * A pull must skip it: the removal has not reached the service yet, and pulling it would bring it back.
+     */
+    fun matches(other: ExternalIds, isSeries: Boolean): Boolean =
+        (tmdbId != null && tmdbId == other.tmdbId && this.isSeries == isSeries) ||
+            (imdbId != null && imdbId == other.imdbId) ||
+            (tvdbId != null && tvdbId == other.tvdbId && this.isSeries == isSeries) ||
+            (traktId != null && traktId == other.traktId && this.isSeries == isSeries) ||
+            (simklId != null && simklId == other.simklId)
+
     companion object {
         fun of(ids: ExternalIds, isSeries: Boolean, trakt: Boolean, simkl: Boolean) =
             PendingRemoval(ids.tmdbId, ids.imdbId, ids.tvdbId, ids.traktId, ids.simklId, isSeries, trakt, simkl)

@@ -21,6 +21,12 @@ fun secret(name: String): String = "\"" + (localProps.getProperty(name) ?: Syste
 val embedKeysInRelease = localProps.getProperty("RELEASE_EMBED_KEYS")?.toBoolean() ?: false
 val secretNames = listOf("TMDB_API_KEY", "TVDB_API_KEY", "OMDB_API_KEY", "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "SIMKL_CLIENT_ID", "SIMKL_CLIENT_SECRET")
 
+// Room schema of the library database (the only one with exportSchema = true), one JSON file per version in
+// app/schemas: to be committed, it is the reference for writing and checking migrations.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "io.github.usernamealreadytakensht.trackstuff"
     compileSdk {

@@ -60,6 +60,8 @@ class SettingsViewModel(
     private val sync: io.github.usernamealreadytakensht.trackstuff.data.sync.SyncCoordinator,
     private val backup: io.github.usernamealreadytakensht.trackstuff.data.repository.LibraryBackup,
     private val metadata: io.github.usernamealreadytakensht.trackstuff.data.repository.MetadataRepository,
+    /** Application scope: outlives this screen (last edit saved when leaving). */
+    private val appScope: kotlinx.coroutines.CoroutineScope,
 ) : ViewModel() {
     /** Discover page prefetch in progress (done to total), null when idle. */
     val prefetch: StateFlow<Pair<Int, Int>?> = metadata.prefetchProgress
@@ -112,7 +114,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             val msg = try {
                 val json = backup.export()
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
                 R.string.backup_exported to null
             } catch (e: Exception) { R.string.backup_failed to describeError(e) }
             _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
@@ -136,7 +138,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             val msg = try {
                 val json = settingsRepo.exportSettings()
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) } ?: error("Cannot open file") }
                 R.string.settings_exported to null
             } catch (e: Exception) { R.string.backup_failed to describeError(e) }
             _state.update { it.copy(backupMessageRes = msg.first, backupMessageArg = msg.second) }
@@ -169,16 +171,25 @@ class SettingsViewModel(
     fun cancelImdbImport() = imdb.cancelImport()
 
     private var saveJob: Job? = null
+    /** True from an edit until its save has completed. */
+    private var unsaved = false
 
     /** Every change is saved automatically (after a short typing pause). */
     fun edit(transform: (AppSettings) -> AppSettings) {
         _state.update { it.copy(form = transform(it.form), saved = false) }
+        unsaved = true
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             kotlinx.coroutines.delay(400)
             settingsRepo.save(_state.value.form)
+            unsaved = false
             _state.update { it.copy(saved = true) }
         }
+    }
+
+    /** Leaving the screen during the typing pause (or mid-save) must not lose the last edit: saved in the application scope. */
+    override fun onCleared() {
+        if (unsaved) { val form = _state.value.form; appScope.launch { settingsRepo.save(form) } }
     }
 
     // ------------------------------------------------------------------ Trakt
@@ -187,7 +198,7 @@ class SettingsViewModel(
 
     fun disconnectTrakt() = viewModelScope.launch { traktSync.disconnect(); _state.update { it.copy(trakt = ServiceState(lastResultRes = R.string.sync_disconnected)) } }
 
-    fun syncTrakt() { viewModelScope.launch { sync.sync(SyncService.TRAKT) } }
+    fun syncTrakt() = sync.syncService(SyncService.TRAKT)
 
     // ------------------------------------------------------------------ Simkl
 
@@ -195,7 +206,7 @@ class SettingsViewModel(
 
     fun disconnectSimkl() = viewModelScope.launch { simklSync.disconnect(); _state.update { it.copy(simkl = ServiceState(lastResultRes = R.string.sync_disconnected)) } }
 
-    fun syncSimkl() { viewModelScope.launch { sync.sync(SyncService.SIMKL) } }
+    fun syncSimkl() = sync.syncService(SyncService.SIMKL)
 
     fun cancelAuth() = sync.cancelAuth()
 

@@ -1,0 +1,435 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 12,
+    "identityHash": "38b9e1711a0cd01e09f4516ef4df5288",
+    "entities": [
+      {
+        "tableName": "media",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tmdbId` INTEGER, `imdbId` TEXT, `tvdbId` INTEGER, `traktId` INTEGER, `simklId` INTEGER, `omdbOrgId` INTEGER, `kind` TEXT NOT NULL, `isSeries` INTEGER NOT NULL, `title` TEXT NOT NULL, `originalTitle` TEXT, `year` INTEGER, `overview` TEXT, `posterUrl` TEXT, `backdropUrl` TEXT, `genres` TEXT NOT NULL, `runtimeMinutes` INTEGER, `numberOfSeasons` INTEGER, `numberOfEpisodes` INTEGER, `ratingTmdb` REAL, `ratingTmdbVotes` INTEGER, `ratingImdb` REAL, `ratingImdbVotes` INTEGER, `ratingRt` INTEGER, `ratingMetacritic` INTEGER, `directors` TEXT NOT NULL, `producers` TEXT NOT NULL, `cast` TEXT NOT NULL, `posterSource` TEXT, `overviewSource` TEXT, `ratingsSource` TEXT, `creditsSource` TEXT, `certification` TEXT, `productionStatus` TEXT, `writers` TEXT NOT NULL, `releaseDate` TEXT, `countries` TEXT NOT NULL, `studios` TEXT NOT NULL, `nextAired` TEXT, `seasonEpisodes` TEXT NOT NULL, `status` TEXT NOT NULL, `currentSeason` INTEGER NOT NULL, `currentEpisode` INTEGER NOT NULL, `addedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `lastSyncedTrakt` INTEGER, `lastSyncedSimkl` INTEGER, `syncedStatus` TEXT, `syncedSeason` INTEGER NOT NULL, `syncedEpisode` INTEGER NOT NULL, `simklSyncedStatus` TEXT, `simklSyncedSeason` INTEGER NOT NULL, `simklSyncedEpisode` INTEGER NOT NULL, `needsEnrichment` INTEGER NOT NULL, `episodesAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "localId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tmdbId",
+            "columnName": "tmdbId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "imdbId",
+            "columnName": "imdbId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tvdbId",
+            "columnName": "tvdbId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "traktId",
+            "columnName": "traktId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "simklId",
+            "columnName": "simklId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omdbOrgId",
+            "columnName": "omdbOrgId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSeries",
+            "columnName": "isSeries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalTitle",
+            "columnName": "originalTitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "year",
+            "columnName": "year",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "overview",
+            "columnName": "overview",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "posterUrl",
+            "columnName": "posterUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "backdropUrl",
+            "columnName": "backdropUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "genres",
+            "columnName": "genres",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runtimeMinutes",
+            "columnName": "runtimeMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "numberOfSeasons",
+            "columnName": "numberOfSeasons",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "numberOfEpisodes",
+            "columnName": "numberOfEpisodes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ratingTmdb",
+            "columnName": "ratingTmdb",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "ratingTmdbVotes",
+            "columnName": "ratingTmdbVotes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ratingImdb",
+            "columnName": "ratingImdb",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "ratingImdbVotes",
+            "columnName": "ratingImdbVotes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ratingRt",
+            "columnName": "ratingRt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ratingMetacritic",
+            "columnName": "ratingMetacritic",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "directors",
+            "columnName": "directors",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "producers",
+            "columnName": "producers",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cast",
+            "columnName": "cast",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posterSource",
+            "columnName": "posterSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "overviewSource",
+            "columnName": "overviewSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ratingsSource",
+            "columnName": "ratingsSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "creditsSource",
+            "columnName": "creditsSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "certification",
+            "columnName": "certification",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "productionStatus",
+            "columnName": "productionStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "writers",
+            "columnName": "writers",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseDate",
+            "columnName": "releaseDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "countries",
+            "columnName": "countries",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "studios",
+            "columnName": "studios",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAired",
+            "columnName": "nextAired",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "seasonEpisodes",
+            "columnName": "seasonEpisodes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentSeason",
+            "columnName": "currentSeason",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentEpisode",
+            "columnName": "currentEpisode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedTrakt",
+            "columnName": "lastSyncedTrakt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSyncedSimkl",
+            "columnName": "lastSyncedSimkl",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "traktSyncedStatus",
+            "columnName": "syncedStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "traktSyncedSeason",
+            "columnName": "syncedSeason",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "traktSyncedEpisode",
+            "columnName": "syncedEpisode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "simklSyncedStatus",
+            "columnName": "simklSyncedStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "simklSyncedSeason",
+            "columnName": "simklSyncedSeason",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "simklSyncedEpisode",
+            "columnName": "simklSyncedEpisode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "needsEnrichment",
+            "columnName": "needsEnrichment",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "episodesAt",
+            "columnName": "episodesAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "localId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_tmdbId",
+            "unique": false,
+            "columnNames": [
+              "tmdbId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_tmdbId` ON `${TABLE_NAME}` (`tmdbId`)"
+          },
+          {
+            "name": "index_media_imdbId",
+            "unique": false,
+            "columnNames": [
+              "imdbId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_imdbId` ON `${TABLE_NAME}` (`imdbId`)"
+          },
+          {
+            "name": "index_media_tvdbId",
+            "unique": false,
+            "columnNames": [
+              "tvdbId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_tvdbId` ON `${TABLE_NAME}` (`tvdbId`)"
+          },
+          {
+            "name": "index_media_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_media_kind",
+            "unique": false,
+            "columnNames": [
+              "kind"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_kind` ON `${TABLE_NAME}` (`kind`)"
+          }
+        ]
+      },
+      {
+        "tableName": "episode",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` INTEGER NOT NULL, `season` INTEGER NOT NULL, `number` INTEGER NOT NULL, `title` TEXT, `airDate` TEXT, PRIMARY KEY(`localId`, `season`, `number`), FOREIGN KEY(`localId`) REFERENCES `media`(`localId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "localId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "season",
+            "columnName": "season",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "number",
+            "columnName": "number",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "airDate",
+            "columnName": "airDate",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "localId",
+            "season",
+            "number"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_episode_airDate",
+            "unique": false,
+            "columnNames": [
+              "airDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_episode_airDate` ON `${TABLE_NAME}` (`airDate`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "localId"
+            ],
+            "referencedColumns": [
+              "localId"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '38b9e1711a0cd01e09f4516ef4df5288')"
+    ]
+  }
+}

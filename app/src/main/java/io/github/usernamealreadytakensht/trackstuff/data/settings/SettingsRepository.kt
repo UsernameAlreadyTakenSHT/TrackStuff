@@ -213,6 +213,8 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun save(s: AppSettings) {
         secrets.edit { p ->
+            // A TVDB token obtained with another key or PIN must not outlive it.
+            if (p[Keys.TVDB] != s.tvdbApiKey.trim() || (p[Keys.TVDB_PIN] ?: "") != s.tvdbPin.trim()) { p.remove(Keys.TVDB_TOKEN); p.remove(Keys.TVDB_TOKEN_EXP) }
             p[Keys.TMDB] = s.tmdbApiKey.trim()
             p[Keys.TVDB] = s.tvdbApiKey.trim()
             p[Keys.TVDB_PIN] = s.tvdbPin.trim()
@@ -277,11 +279,15 @@ class SettingsRepository(private val context: Context) {
     suspend fun pendingRemovals(): List<io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval> =
         io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval.decode(context.dataStore.data.first()[Keys.PENDING_REMOVALS] ?: "")
 
-    suspend fun setPendingRemovals(list: List<io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval>) {
-        context.dataStore.edit { p -> if (list.isEmpty()) p.remove(Keys.PENDING_REMOVALS) else p[Keys.PENDING_REMOVALS] = io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval.encode(list) }
+    /** Reads, transforms and writes the list in one atomic edit: a removal queued meanwhile is never lost. */
+    suspend fun updatePendingRemovals(transform: (List<io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval>) -> List<io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval>) {
+        context.dataStore.edit { p ->
+            val list = transform(io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval.decode(p[Keys.PENDING_REMOVALS] ?: ""))
+            if (list.isEmpty()) p.remove(Keys.PENDING_REMOVALS) else p[Keys.PENDING_REMOVALS] = io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval.encode(list)
+        }
     }
 
-    suspend fun addPendingRemoval(r: io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval) = setPendingRemovals(pendingRemovals() + r)
+    suspend fun addPendingRemoval(r: io.github.usernamealreadytakensht.trackstuff.data.sync.PendingRemoval) { updatePendingRemovals { it + r } }
 
     // ---- First launch
 

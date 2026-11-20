@@ -96,11 +96,11 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     var confirmRemove by remember { mutableStateOf(false) }
 
-    val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     LaunchedEffect(state.message) {
         state.message?.let { m ->
-            val arg = m.argRes?.let { context.getString(it) } ?: m.arg
-            snackbar.showSnackbar(if (arg != null) context.getString(m.res, arg) else context.getString(m.res))
+            val arg = m.argRes?.let { resources.getString(it) } ?: m.arg
+            snackbar.showSnackbar(if (arg != null) resources.getString(m.res, arg) else resources.getString(m.res))
             vm.consumeMessage()
         }
     }

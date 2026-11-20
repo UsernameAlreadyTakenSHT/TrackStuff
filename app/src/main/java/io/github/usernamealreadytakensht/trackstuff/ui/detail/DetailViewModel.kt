@@ -64,6 +64,7 @@ class DetailViewModel(
 
     private var episodesJob: Job? = null
     private var providersJob: Job? = null
+    private var itemJob: Job? = null
 
     private fun observeLocal(id: Long) {
         episodesJob?.cancel()
@@ -73,7 +74,10 @@ class DetailViewModel(
         // Episode list fetched once a week at most; providers looked up once per page.
         viewModelScope.launch { runCatching { library.refreshEpisodes(id) } }
         viewModelScope.launch { runCatching { library.completeIds(id) } }
-        viewModelScope.launch {
+        // One observer at a time: after "remove, then add again" the one of the removed entry would keep
+        // reporting "not in the library".
+        itemJob?.cancel()
+        itemJob = viewModelScope.launch {
             library.observe(id).collect { item ->
                 if (item != null && providersJob == null) loadProviders(item.details)
                 if (item == null) _state.update { it.copy(loading = false, item = null) }
@@ -192,6 +196,6 @@ class DetailViewModel(
 
     private fun updateTracking(transform: (io.github.usernamealreadytakensht.trackstuff.domain.UserTracking) -> io.github.usernamealreadytakensht.trackstuff.domain.UserTracking) {
         val id = localId ?: return
-        viewModelScope.launch { library.updateTracking(id, transform) }
+        viewModelScope.launch { library.updateTracking(id, transform = transform) }
     }
 }

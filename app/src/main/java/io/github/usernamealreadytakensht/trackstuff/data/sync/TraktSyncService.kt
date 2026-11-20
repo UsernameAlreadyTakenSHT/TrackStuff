@@ -139,29 +139,34 @@ class TraktSyncService(
         // ---- Pull: only when something changed on Trakt since the last sync.
         var activities: String? = null
         val since = settingsRepo.currentTokens().traktActivitiesAt
-        try { activities = api.lastActivities().all } catch (e: Exception) { if (e.isUnauthorized()) throw e; Log.w(TAG, e) }
+        try { activities = api.lastActivities().all } catch (e: Exception) { if (e.mustPropagate()) throw e; Log.w(TAG, e) }
         val changed = activities == null || since.isBlank() || activities != since
         if (changed) {
             // Local ids seen in the Trakt lists: anything synced before but no longer there was removed on Trakt.
             val present = HashSet<Long>()
             var complete = true
-            try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present) } catch (e: Exception) { if (e.isUnauthorized()) throw e; complete = false; errors += "Watchlist: ${describeError(e)}"; Log.w(TAG, e) }
-            try { pulled += pullWatched(api.watchedMovies(), isShow = false, present) } catch (e: Exception) { if (e.isUnauthorized()) throw e; complete = false; errors += "Watched movies: ${describeError(e)}"; Log.w(TAG, e) }
-            try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present) } catch (e: Exception) { if (e.isUnauthorized()) throw e; complete = false; errors += "Watched shows: ${describeError(e)}"; Log.w(TAG, e) }
+            // Titles removed here whose removal has not reached Trakt yet (the push comes after the pull):
+            // still in the Trakt lists, they must not be pulled back into the library.
+            val removed = settingsRepo.pendingRemovals().filter { it.trakt }
+            // Local titles met for the first time in this pull (never synced with Trakt before).
+            val firstContacts = HashSet<Long>()
+            try { pulled += pullWatchlist(api.watchlistMovies() + api.watchlistShows(), present, removed, firstContacts) } catch (e: Exception) { if (e.mustPropagate()) throw e; complete = false; errors += "Watchlist: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatched(api.watchedMovies(), isShow = false, present, removed, firstContacts) } catch (e: Exception) { if (e.mustPropagate()) throw e; complete = false; errors += "Watched movies: ${describeError(e)}"; Log.w(TAG, e) }
+            try { pulled += pullWatched(api.watchedShows(extended = "full"), isShow = true, present, removed, firstContacts) } catch (e: Exception) { if (e.mustPropagate()) throw e; complete = false; errors += "Watched shows: ${describeError(e)}"; Log.w(TAG, e) }
             // No reconciliation on the first pull after (re)connecting: nothing local has been pushed there yet.
             if (complete && since.isNotBlank()) pulled += reconcileRemovals(present)
         }
 
         // ---- Push
-        try { pushed = pushLocal(api) } catch (e: Exception) { if (e.isUnauthorized()) throw e; errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
+        try { pushed = pushLocal(api) } catch (e: Exception) { if (e.mustPropagate()) throw e; errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
 
         // Resume point: the timestamp after our pushes, so our own changes are not read back.
         if (errors.isEmpty()) try {
             val after = if (pushed > 0) api.lastActivities().all else activities
             if (after != null) settingsRepo.saveTraktActivitiesAt(after)
-        } catch (e: Exception) { if (e.isUnauthorized()) throw e; Log.w(TAG, e) }
+        } catch (e: Exception) { if (e.mustPropagate()) throw e; Log.w(TAG, e) }
 
-        val enriched = try { library.enrichPending() } catch (e: Exception) { 0 }
+        val enriched = try { library.enrichPending() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { 0 }
         return SyncReport(pushed, pulled, enriched, errors)
     }
 
@@ -187,30 +192,42 @@ class TraktSyncService(
         return removed
     }
 
-    private suspend fun pullWatchlist(entries: List<TraktEntry>, present: MutableSet<Long>): Int {
+    private suspend fun pullWatchlist(entries: List<TraktEntry>, present: MutableSet<Long>, removed: List<PendingRemoval>, firstContacts: MutableSet<Long>): Int {
         var n = 0
         for (e in entries) {
             val media = e.movie ?: e.show ?: continue
             val isShow = e.show != null
             val ids = media.ids()
+            if (removed.any { it.matches(ids, isShow) }) continue
             val existing = library.findExisting(ids, isShow)
             if (existing == null) {
                 present += library.addStub(stubDetails(ids, isShow, media.title, media.year), UserTracking(status = WatchStatus.PLANNED, lastSyncedTrakt = System.currentTimeMillis()))
                 n++
             } else {
                 present += existing.localId
-                library.markSynced(existing.localId, trakt = false, simkl = false, ids = ids)
+                val t = existing.tracking
+                if (t.lastSyncedTrakt == null) firstContacts += existing.localId
+                val onTrakt = t.copy(status = WatchStatus.PLANNED, currentSeason = 0, currentEpisode = 0)
+                when {
+                    t.lastSyncedTrakt != null -> library.markSynced(existing.localId, trakt = false, simkl = false, ids = ids)
+                    // First contact (just connected, or imported from a backup), planned on both sides: in sync.
+                    t.status == WatchStatus.PLANNED -> library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids, pushed = onTrakt)
+                    // First contact, further along here: the watchlist entry is what Trakt has, and the title
+                    // stays to push (synced "just before" its last change) so that the history gets the rest.
+                    else -> library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids, at = t.updatedAt - 1, pushed = onTrakt)
+                }
             }
         }
         return n
     }
 
-    private suspend fun pullWatched(entries: List<TraktEntry>, isShow: Boolean, present: MutableSet<Long>): Int {
+    private suspend fun pullWatched(entries: List<TraktEntry>, isShow: Boolean, present: MutableSet<Long>, removed: List<PendingRemoval>, firstContacts: MutableSet<Long>): Int {
         var n = 0
         val now = System.currentTimeMillis()
         for (e in entries) {
             val media = (if (isShow) e.show else e.movie) ?: continue
             val ids = media.ids()
+            if (removed.any { it.matches(ids, isShow) }) continue
             val existing = library.findExisting(ids, isShow)
             // Progress derived from watched episodes (last season / last episode).
             val lastSeason = e.seasons.filter { it.number > 0 }.maxByOrNull { it.number }
@@ -229,28 +246,32 @@ class TraktSyncService(
                 )
                 present += library.addStub(stubDetails(ids, isShow, media.title, media.year), tracking)
                 n++
-            } else if (!existing.locallyNewer()) {
+            } else {
                 present += existing.localId
+                val local = existing.tracking.watchState()
                 val total = existing.details.numberOfEpisodes ?: aired
                 val completed = !isShow || (total != null && total > 0 && watchedCount >= total)
-                val newSeason = progress?.first ?: existing.tracking.currentSeason
-                val newEpisode = progress?.second ?: existing.tracking.currentEpisode
-                library.updateTracking(existing.localId) { t ->
-                    t.copy(
-                        status = when {
-                            completed -> WatchStatus.COMPLETED
-                            t.status == WatchStatus.PLANNED -> WatchStatus.WATCHING
-                            else -> t.status
-                        },
-                        currentSeason = newSeason,
-                        currentEpisode = newEpisode,
-                        lastSyncedTrakt = now,
-                    )
+                val onTrakt = WatchState(if (completed) WatchStatus.COMPLETED else WatchStatus.WATCHING, progress?.first ?: 0, progress?.second ?: 0)
+                // Also when the watchlist step of this pull has just seen it: the history entry is what counts.
+                val firstContact = existing.tracking.lastSyncedTrakt == null || existing.localId in firstContacts
+                if (firstContact && isAhead(local, onTrakt)) {
+                    // First contact (just connected, or imported from a backup) and further along here: what
+                    // Trakt has becomes the reference and the title stays to push (synced "just before" its
+                    // last change), so that only the difference is sent — never the whole history again.
+                    library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids, at = existing.tracking.updatedAt - 1,
+                        pushed = existing.tracking.copy(status = onTrakt.status, currentSeason = onTrakt.season, currentEpisode = onTrakt.episode))
+                } else if (firstContact || !existing.locallyNewer()) {
+                    // Trakt wins (on first contact: it is as far or further). Only a real change touches the
+                    // title: an unchanged one keeps its place in the library and is not pushed to the other service.
+                    val pulledNow = traktPulledState(local, completed, progress)
+                    if (pulledNow != local) library.updateTracking(existing.localId, fromSync = true) { t ->
+                        t.copy(status = pulledNow.status, currentSeason = pulledNow.season, currentEpisode = pulledNow.episode)
+                    }
+                    // The pulled state is also the reference for the next delta push.
+                    val pulledState = existing.tracking.copy(status = onTrakt.status, currentSeason = pulledNow.season, currentEpisode = pulledNow.episode)
+                    library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids, pushed = pulledState)
                 }
-                // The pulled state is also the reference for the next delta push.
-                val pulledState = existing.tracking.copy(status = if (completed) WatchStatus.COMPLETED else WatchStatus.WATCHING, currentSeason = newSeason, currentEpisode = newEpisode)
-                library.markSynced(existing.localId, trakt = true, simkl = false, ids = ids, pushed = pulledState)
-            } else present += existing.localId
+            }
         }
         return n
     }
@@ -262,10 +283,10 @@ class TraktSyncService(
         val pending = settingsRepo.pendingRemovals().filter { it.trakt && !it.ids.isEmpty }
         if (pending.isEmpty()) return 0
         val body = TraktSyncBody(pending.filter { !it.isSeries }.map { TraktSyncMovie(it.ids.toTrakt()) }, pending.filter { it.isSeries }.map { TraktSyncShow(it.ids.toTrakt()) })
-        api.removeFromWatchlist(body)
-        api.removeFromHistory(body)
+        post { api.removeFromWatchlist(body) }
+        post { api.removeFromHistory(body) }
         val done = pending.toSet()
-        settingsRepo.setPendingRemovals(settingsRepo.pendingRemovals().mapNotNull { r -> if (r in done) r.copy(trakt = false).takeIf { it.simkl } else r })
+        settingsRepo.updatePendingRemovals { list -> list.mapNotNull { r -> if (r in done) r.copy(trakt = false).takeIf { it.simkl } else r } }
         return pending.size
     }
 
@@ -322,14 +343,11 @@ class TraktSyncService(
         val histMovies = movies.filter { it.tracking.status == WatchStatus.COMPLETED && pushedBefore(it) != WatchStatus.COMPLETED }
         val histShows = shows.mapNotNull { s ->
             val t = s.tracking
-            when {
-                t.status == WatchStatus.COMPLETED -> if (pushedBefore(s) != WatchStatus.COMPLETED) TraktSyncShow(ids(s)) else null // whole show
-                t.status == WatchStatus.WATCHING && t.currentSeason > 0 -> {
-                    val from = if (pushedBefore(s) == WatchStatus.WATCHING) t.traktSyncedSeason to t.traktSyncedEpisode else 0 to 0
-                    val delta = episodesBetween(from.first, from.second, t.currentSeason, t.currentEpisode, s.details.seasonEpisodes)
-                    if (delta.isEmpty()) null else TraktSyncShow(ids(s), seasons = delta.map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
-                }
-                else -> null
+            val onTrakt = pushedBefore(s)?.let { WatchState(it, t.traktSyncedSeason, t.traktSyncedEpisode) }
+            when (val add = showHistoryToAdd(t.watchState(), onTrakt, s.details.seasonEpisodes)) {
+                HistoryAdd.None -> null
+                HistoryAdd.WholeShow -> TraktSyncShow(ids(s))
+                is HistoryAdd.Episodes -> TraktSyncShow(ids(s), seasons = add.seasons.map { (num, eps) -> TraktSeasonRef(num, eps.map { TraktEpisodeRef(it) }) })
             }
         }
         if (histMovies.isNotEmpty() || histShows.isNotEmpty()) {
@@ -363,7 +381,10 @@ class TraktSyncService(
         /** Refresh the access token this long before it expires (tokens last 90 days). */
         const val REFRESH_AHEAD_MS = 7 * 24 * 60 * 60 * 1000L
 
-        /** A 401 must not be swallowed by the per-step error handling: it triggers a token refresh in [sync]. */
-        private fun Exception.isUnauthorized() = this is retrofit2.HttpException && code() == 401
+        /**
+         * Not swallowed by the per-step error handling: a 401, which triggers a token refresh in [sync], and
+         * a cancellation, which must stop the sync instead of being reported as a failed step.
+         */
+        private fun Exception.mustPropagate() = this is kotlinx.coroutines.CancellationException || (this is retrofit2.HttpException && code() == 401)
     }
 }

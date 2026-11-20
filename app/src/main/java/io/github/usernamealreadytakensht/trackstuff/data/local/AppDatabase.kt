@@ -5,8 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-/** The user's library. */
-@Database(entities = [MediaEntity::class, EpisodeEntity::class], version = 12, exportSchema = false)
+/**
+ * The user's library. Its schema is exported (app/schemas) and every version change needs a migration: there
+ * is no destructive fallback here, a missing migration fails loudly instead of silently emptying the library.
+ */
+@Database(entities = [MediaEntity::class, EpisodeEntity::class], version = 12, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
     abstract fun episodeDao(): EpisodeDao
@@ -75,7 +78,6 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "trackstuff.db")
                 .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
-                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
     }
 }
@@ -83,6 +85,7 @@ abstract class AppDatabase : RoomDatabase() {
 /**
  * Imported omdb.org database, deliberately separate: a schema change of the library
  * must never wipe the ~12 MB of dumps (downloadable at most once a month).
+ * A cache that can be downloaded again: the destructive fallback is acceptable here (and for the IMDb database).
  */
 @Database(entities = [OmdbTitleEntity::class, OmdbAliasEntity::class, OmdbCastEntity::class, OmdbTitleFts::class, OmdbAliasFts::class], version = 5, exportSchema = false)
 abstract class OmdbOrgDatabase : RoomDatabase() {

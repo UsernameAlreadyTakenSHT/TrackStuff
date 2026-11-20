@@ -287,7 +287,7 @@ private fun LocalDatasetBlock(hint: String, titleCount: Int, lastImportAt: Long?
             else -> {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f)) {
-                        Text(if (titleCount > 0) pluralStringResource(R.plurals.settings_omdborg_titles, titleCount, "%,d".format(java.util.Locale.getDefault(), titleCount)) else stringResource(R.string.settings_omdborg_not_imported), style = MaterialTheme.typography.bodyMedium)
+                        Text(if (titleCount > 0) pluralStringResource(R.plurals.settings_omdborg_titles, titleCount, "%,d".format(androidx.compose.ui.platform.LocalConfiguration.current.locales[0], titleCount)) else stringResource(R.string.settings_omdborg_not_imported), style = MaterialTheme.typography.bodyMedium)
                         lastImportAt?.let { Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     Button(onClick = onImport, enabled = canDownload) { Text(stringResource(if (titleCount > 0) R.string.settings_omdborg_update else R.string.settings_omdborg_download)) }

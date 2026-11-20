@@ -37,6 +37,13 @@ interface MediaDao {
     @Query("SELECT * FROM media WHERE simklId = :simklId LIMIT 1")
     suspend fun findBySimkl(simklId: Int): MediaEntity?
 
+    @Query("SELECT * FROM media WHERE omdbOrgId = :omdbOrgId LIMIT 1")
+    suspend fun findByOmdbOrg(omdbOrgId: Int): MediaEntity?
+
+    /** A title stored without any external id (e.g. an "Unknown title" page), matched by title, year and type. */
+    @Query("SELECT * FROM media WHERE title = :title AND year IS :year AND isSeries = :isSeries AND tmdbId IS NULL AND imdbId IS NULL AND tvdbId IS NULL AND traktId IS NULL AND simklId IS NULL AND omdbOrgId IS NULL LIMIT 1")
+    suspend fun findWithoutIds(title: String, year: Int?, isSeries: Boolean): MediaEntity?
+
     @Query("SELECT * FROM media WHERE needsEnrichment = 1")
     suspend fun getNeedingEnrichment(): List<MediaEntity>
 
@@ -45,6 +52,19 @@ interface MediaDao {
 
     @Update
     suspend fun update(entity: MediaEntity)
+
+    /**
+     * Reads a row, applies [transform] and writes the result back in one transaction, so that two writers
+     * (a sync and the user, a refresh and a sync) cannot overwrite each other's columns. Returns the new row,
+     * or null when the title no longer exists.
+     */
+    @androidx.room.Transaction
+    suspend fun modify(id: Long, transform: (MediaEntity) -> MediaEntity): MediaEntity? {
+        val e = getById(id) ?: return null
+        val n = transform(e)
+        if (n != e) update(n)
+        return n
+    }
 
     @Query("UPDATE media SET lastSyncedTrakt = NULL, traktId = NULL")
     suspend fun clearTraktSync()

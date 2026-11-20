@@ -117,18 +117,18 @@ class SimklSyncService(
                 if (activities.removedStamp != tokens.simklRemovedStamp) pulled += reconcileRemovals(api)
             }
             pullOk = true
-        } catch (e: SyncAuthException) { throw e } catch (e: Exception) { errors += "Pull: ${describeError(e)}"; Log.w(TAG, e) }
+        } catch (e: SyncAuthException) { throw e } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { errors += "Pull: ${describeError(e)}"; Log.w(TAG, e) }
 
-        try { pushed = push(api) } catch (e: Exception) { errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
+        try { pushed = push(api) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { errors += "Push: ${describeError(e)}"; Log.w(TAG, e) }
 
         // Resume point for the next sync: the `all` timestamp after our pushes (our own changes will not be
         // downloaded again). A still-empty account has no timestamp: use the current time.
         if (pullOk) try {
             val after = if (pushed > 0) api.activities() else before
             settingsRepo.saveSimklActivitiesAt(after?.all ?: before?.all ?: nowIso(), after?.removedStamp ?: before?.removedStamp ?: "")
-        } catch (e: Exception) { Log.w(TAG, e) }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Log.w(TAG, e) }
 
-        val enriched = try { library.enrichPending() } catch (e: Exception) { 0 }
+        val enriched = try { library.enrichPending() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { 0 }
         return SyncReport(pushed, pulled, enriched, errors)
     }
 
@@ -188,9 +188,12 @@ class SimklSyncService(
     private suspend fun pull(items: List<SimklItem>, isShow: Boolean, anime: Boolean): Int {
         var n = 0
         val now = System.currentTimeMillis()
+        // Titles removed here whose removal has not reached Simkl yet (the push comes after the pull): not pulled back.
+        val removed = settingsRepo.pendingRemovals().filter { it.simkl }
         for (it in items) {
             val media = (if (isShow) it.show else it.movie) ?: continue
             val ids = media.ids()
+            if (removed.any { r -> r.matches(ids, isShow) }) continue
             val progress = parseSxxExx(it.lastWatched)
             // "watching" / "hold" without any episode marked is still "plan to watch" here (status follows progress).
             val status = statusFromSimkl(it.status)?.let { st -> if (st == WatchStatus.WATCHING && progress == null) WatchStatus.PLANNED else st } ?: continue
@@ -206,7 +209,10 @@ class SimklSyncService(
                 library.addStub(stubDetails(ids, isShow, media.title, media.year, kind, SimklApi.posterUrl(media.poster)), tracking)
                 n++
             } else if (!existing.locallyNewer()) {
-                library.updateTracking(existing.localId) { t ->
+                // Only a real change touches the title: an unchanged one keeps its place in the library and is
+                // not pushed to the other service.
+                val pulledNow = WatchState(status, progress?.first ?: existing.tracking.currentSeason, progress?.second ?: existing.tracking.currentEpisode)
+                if (pulledNow != existing.tracking.watchState()) library.updateTracking(existing.localId, fromSync = true) { t ->
                     t.copy(
                         status = status,
                         currentSeason = progress?.first ?: t.currentSeason,
@@ -343,7 +349,7 @@ class SimklSyncService(
             )
         }
         val done = pending.toSet()
-        settingsRepo.setPendingRemovals(settingsRepo.pendingRemovals().mapNotNull { r -> if (r in done) r.copy(simkl = false).takeIf { it.trakt } else r })
+        settingsRepo.updatePendingRemovals { list -> list.mapNotNull { r -> if (r in done) r.copy(simkl = false).takeIf { it.trakt } else r } }
         return pending.size
     }
 

@@ -23,7 +23,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        handleLink(intent)
+        // Only on a fresh start: a recreation (rotation, restore) gets the same intent again, and the page it
+        // opened is already in the saved back stack.
+        if (savedInstanceState == null) handleLink(intent)
     }
 
     override fun onNewIntent(intent: Intent) {

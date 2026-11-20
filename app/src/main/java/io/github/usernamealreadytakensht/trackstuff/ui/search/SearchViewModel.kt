@@ -61,6 +61,9 @@ class SearchViewModel(private val metadata: MetadataRepository, private val libr
             _state.update { it.copy(loading = true) }
             val outcome = try {
                 metadata.search(q, _state.value.only)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Replaced by a newer search: must not publish an error (nor clear the loading bar) over it.
+                throw e
             } catch (e: Exception) {
                 io.github.usernamealreadytakensht.trackstuff.data.repository.SearchOutcome(emptyList(), null, listOf(describeError(e)))
             }

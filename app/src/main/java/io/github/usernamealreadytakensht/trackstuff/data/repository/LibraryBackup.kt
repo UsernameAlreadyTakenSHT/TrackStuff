@@ -38,10 +38,11 @@ class LibraryBackup(private val dao: MediaDao, private val library: LibraryRepos
         var added = 0; var updated = 0; var skipped = 0
         for (e in file.items) {
             val ids = ExternalIds(tmdbId = e.tmdbId, imdbId = e.imdbId, tvdbId = e.tvdbId, traktId = e.traktId, simklId = e.simklId, omdbOrgId = e.omdbOrgId)
-            val existing = library.findExisting(ids, e.isSeries)
+            val existing = library.findExisting(ids, e.isSeries) ?: library.findUnidentified(ids, e.title, e.year, e.isSeries)
+            // The episode lists are not part of the export: the fetch time is cleared so that they are fetched again.
             when {
-                existing == null -> { dao.upsert(e.copy(localId = 0, lastSyncedTrakt = null, lastSyncedSimkl = null)); added++ }
-                e.updatedAt > existing.tracking.updatedAt -> { dao.update(e.copy(localId = existing.localId, lastSyncedTrakt = null, lastSyncedSimkl = null)); updated++ }
+                existing == null -> { dao.upsert(e.copy(localId = 0, lastSyncedTrakt = null, lastSyncedSimkl = null, episodesAt = null)); added++ }
+                e.updatedAt > existing.tracking.updatedAt -> { dao.update(e.copy(localId = existing.localId, lastSyncedTrakt = null, lastSyncedSimkl = null, episodesAt = null)); updated++ }
                 else -> skipped++
             }
         }

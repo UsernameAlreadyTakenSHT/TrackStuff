@@ -1,4 +1,4 @@
 <resources>
 
-    <style name="Theme.TrackStuff" parent="Theme.MaterialComponents.Light" />
+    <style name="Theme.TrackStuff" parent="Theme.MaterialComponents.DayNight" />
 </resources>

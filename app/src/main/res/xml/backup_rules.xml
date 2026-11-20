@@ -4,8 +4,12 @@
     (IMDb, omdb.org) and the HTTP cache are left out — they can be downloaded again and would exceed
     the 25 MB backup quota, which would make the whole backup fail. API keys and sign-in tokens are kept in
     files/secrets/, outside these rules: they never leave the phone (use the settings export instead).
+    The library database is in write-ahead-log mode: its latest changes live in the -wal file until a
+    checkpoint, so the three files go together.
 -->
 <full-backup-content>
     <include domain="database" path="trackstuff.db"/>
+    <include domain="database" path="trackstuff.db-wal"/>
+    <include domain="database" path="trackstuff.db-shm"/>
     <include domain="file" path="datastore/"/>
 </full-backup-content>
